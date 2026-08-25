@@ -17,6 +17,7 @@
 #include <string>
 #include <utility>
 
+#include "absl/log/absl_log.h"  // from @com_google_absl
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
 #include "absl/strings/str_cat.h"  // from @com_google_absl
@@ -121,8 +122,11 @@ absl::StatusOr<std::string> PromptTemplate::Apply(
   minijinja_inputs["eos_token"] = input.eos_token;
   auto result = minijinja_template_->apply(minijinja_inputs.dump());
   if (!result.is_ok) {
+    std::string error = std::string(result.error);
+    ABSL_LOG(ERROR) << "minijinja apply failed: " << error
+                    << "\ninputs: " << minijinja_inputs.dump();
     return absl::InternalError(
-        absl::StrCat("Failed to apply template: ", std::string(result.error)));
+        absl::StrCat("Failed to apply template: ", error));
   }
   return std::string(result.content);
 }

@@ -92,7 +92,10 @@ litert::lm::OptionalArgs CreateOptionalArgs(const char* extra_context) {
   if (extra_context) {
     auto extra_context_json =
         nlohmann::ordered_json::parse(extra_context, nullptr, false);
-    if (!extra_context_json.is_null() && !extra_context_json.empty()) {
+    // A discarded value (e.g. from an empty or malformed string) must not be
+    // forwarded — it corrupts the prompt template inputs downstream.
+    if (!extra_context_json.is_discarded() && !extra_context_json.is_null() &&
+        !extra_context_json.empty()) {
       optional_args.extra_context = extra_context_json;
     }
   }
@@ -847,11 +850,42 @@ LiteRtLmConversation* litert_lm_engine_create_constrained_conversation(
   // unconstrained send.
   std::string lark_grammar;
   if (!json_preface.tools.is_null() && !json_preface.tools.empty()) {
+    // CreateLarkGrammarForTools expects a FLAT tool shape — it reads top-level
+    // tool["name"] and tool["parameters"]. But json_preface.tools is the
+    // OpenAI-nested shape ({"type":"function","function":{"name",...}}) which
+    // must stay nested for the chat template (it renders tool['function']
+    // ['name']). So flatten a copy here: lift each tool["function"] to the top
+    // level. Without this, every tool is skipped → "No tools provided".
+    nlohmann::ordered_json flat_tools = nlohmann::ordered_json::array();
+    for (const auto& tool : json_preface.tools) {
+      if (tool.contains("function") && tool["function"].is_object()) {
+        flat_tools.push_back(tool["function"]);
+      } else {
+        flat_tools.push_back(tool);
+      }
+    }
     litert::lm::LlgConstraintsOptions opts;
+    // kTextAndOrFunctionCalls (not kFunctionCallsOnly): the agent must be able
+    // to EITHER call a tool OR emit a final text answer. kFunctionCallsOnly
+    // forces a function call every turn, so the model can never produce a final
+    // reply and the agent loops until max_iter. In this mode the function-call
+    // portions are still grammar-constrained to the tool schemas.
     opts.constraint_mode =
-        litert::lm::LlgConstraintMode::kFunctionCallsOnly;
+        litert::lm::LlgConstraintMode::kTextAndOrFunctionCalls;
+    // The FC control tokens default to placeholders (<start_function_call>,
+    // <escape>, ...) that don't exist in the model's vocab. Set the model's
+    // actual FC tokens so the grammar's <special_token> rules resolve against
+    // the tokenizer (which now marks these as special — see
+    // SentencePieceTokenizer::GetTokens). These are the Gemma-4 values from the
+    // loaded model config. TODO: plumb from the model's data-processor config
+    // instead of hardcoding once an accessor is exposed.
+    opts.fc_code_fence_start = "<|tool_call>";
+    opts.fc_code_fence_end = "<tool_call|>";
+    opts.fc_open_quote = "<|\"|>";
+    opts.fc_close_quote = "<|\"|>";
+    opts.fc_function_response_start = "<|tool_response>";
     auto grammar_or =
-        litert::lm::CreateLarkGrammarForTools(json_preface.tools, opts);
+        litert::lm::CreateLarkGrammarForTools(flat_tools, opts);
     if (grammar_or.ok()) {
       lark_grammar = *std::move(grammar_or);
     } else {

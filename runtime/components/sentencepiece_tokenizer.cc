@@ -131,9 +131,26 @@ absl::StatusOr<std::string> SentencePieceTokenizer::TokenIdsToText(
 }
 
 std::vector<std::string> SentencePieceTokenizer::GetTokens() const {
+  // LLGuidance (the only consumer of GetTokens, via LlgConstraintProvider)
+  // requires control/special tokens to be prefixed with the
+  // SPECIAL_TOKEN_MARKER byte 0xFF so its token-trie can resolve them as
+  // special tokens. The constrained-decoding Lark grammar references FC
+  // control tokens (e.g. "<|tool_call>", "<|\"|>") via <special_token> rules;
+  // without the marker llguidance has no special-token-prefix node and panics
+  // ("missing special token prefix"). 0xFF is not a valid UTF-8 byte, so it
+  // never collides with a normal piece. CONTROL (e.g. <bos>/<eos>) and
+  // USER_DEFINED (the chat/FC control tokens) are exactly the special ones.
+  constexpr char kSpecialTokenMarker = static_cast<char>(0xFF);
   std::vector<std::string> tokens;
+  tokens.reserve(processor_->model_proto().pieces_size());
   for (const auto& piece : processor_->model_proto().pieces()) {
-    tokens.push_back(piece.piece());
+    const auto type = piece.type();
+    if (type == sentencepiece::ModelProto::SentencePiece::CONTROL ||
+        type == sentencepiece::ModelProto::SentencePiece::USER_DEFINED) {
+      tokens.push_back(std::string(1, kSpecialTokenMarker) + piece.piece());
+    } else {
+      tokens.push_back(piece.piece());
+    }
   }
   return tokens;
 }
