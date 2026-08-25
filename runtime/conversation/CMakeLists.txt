@@ -17,6 +17,27 @@ set(PKG_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_subdirectory(model_data_processor)
 
+# ==============================================================================
+# Channel Util
+# ==============================================================================
+add_litertlm_library(runtime_conversation_channel_util STATIC
+  channel_util.cc
+)
+add_library(LiteRTLM::Runtime::Conversation::ChannelUtil ALIAS runtime_conversation_channel_util)
+
+target_include_directories(runtime_conversation_channel_util
+  PUBLIC
+    ${PKG_ROOT}
+    ${GENERATED_SRC_DIR}
+    ${LITERTLM_INCLUDE_PATHS}
+)
+
+target_link_libraries(runtime_conversation_channel_util
+  PUBLIC
+    LiteRTLM::Runtime::Conversation::IoTypes
+    LITERTLM_DEPS
+)
+
 add_litertlm_library(runtime_conversation_conversation STATIC
   conversation.cc
 )
@@ -30,6 +51,7 @@ target_include_directories(runtime_conversation_conversation
 
 target_link_libraries(runtime_conversation_conversation
   PUBLIC
+    LiteRTLM::Runtime::Conversation::ChannelUtil
     LiteRTLM::Runtime::Conversation::InternalCallbackUtil
     LiteRTLM::Runtime::Conversation::IoTypes
     LiteRTLM::Runtime::Conversation::Processor::ConfigRegistry
@@ -55,6 +77,7 @@ target_include_directories(runtime_conversation_internal_callback_util
 
 target_link_libraries(runtime_conversation_internal_callback_util
   PUBLIC
+    LiteRTLM::Runtime::Conversation::ChannelUtil
     LiteRTLM::Runtime::Conversation::IoTypes
     LiteRTLM::Runtime::Conversation::Processor::ConfigRegistry
     LiteRTLM::Runtime::Conversation::Processor::Interface

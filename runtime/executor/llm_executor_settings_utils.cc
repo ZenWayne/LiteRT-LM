@@ -203,10 +203,7 @@ absl::StatusOr<litert::Options> CreateCompilationOptions(
       gpu_compilation_options.HintWaitingForCompletion(
           advanced_settings.hint_waiting_for_completion.has_value() &&
           advanced_settings.hint_waiting_for_completion.value());
-      if (advanced_settings.hint_kernel_batch_size.has_value()) {
-        gpu_compilation_options.SetKernelBatchSize(
-            advanced_settings.hint_kernel_batch_size.value());
-      }
+      // [LiteRTLM-patch] SetKernelBatchSize disabled for LiteRT compatibility
       if (advanced_settings.is_benchmark) {
         gpu_compilation_options.SetSyncExecutionModeWaitType(
             GpuOptions::SyncExecutionModeWaitType::kActive);
@@ -278,8 +275,8 @@ absl::StatusOr<litert::Options> CreateCompilationOptions(
       if (executor_settings.GetAdvancedSettings()) {
         advanced_settings = *executor_settings.GetAdvancedSettings();
       }
-      runtime_options.SetDisableDelegateClustering(
-          advanced_settings.disable_delegate_clustering);
+      // [LiteRTLM-patch] runtime_options.SetDisableDelegateClustering(
+//          advanced_settings.disable_delegate_clustering);
       compilation_options.SetHardwareAccelerators(HwAccelerators::kCpu);
       break;
     }

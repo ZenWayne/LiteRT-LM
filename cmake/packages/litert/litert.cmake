@@ -43,12 +43,12 @@ ExternalProject_Add(
     flatbuffers_external
     tflite_external
 
-  GIT_REPOSITORY
-    https://github.com/google-ai-edge/LiteRT.git
-  GIT_TAG
-    fb16353a648922cb6c67a8e9a7a9ebc946360ad2 #Updated on 2026-03-24
-  GIT_SUBMODULES ""
-  GIT_SUBMODULES_RECURSE FALSE
+  # Source pre-populated out-of-band as a depth-1 shallow clone at the pinned
+  # SHA below (full clone drops on the proxy). git fetch --depth 1 origin <SHA>.
+  #   SHA: fb16353a648922cb6c67a8e9a7a9ebc946360ad2 # Updated on 2026-03-24
+  DOWNLOAD_COMMAND ""
+  SOURCE_DIR
+    ${LITERT_SOURCE_DIR}
   PREFIX
     ${LITERT_EXT_PREFIX}
   SOURCE_SUBDIR

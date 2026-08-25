@@ -44,8 +44,13 @@ if(NOT EXISTS "${TFLITE_STATIC_LIB}")
             opencl_headers_external
             protobuf_external
             tokenizers-cpp_external
-        GIT_REPOSITORY  https://github.com/tensorflow/tensorflow.git
-        GIT_TAG         862baf45439c742ac3a9d43e88088943bd3a582d # Updated on 2026-03-18
+        # Source pre-populated out-of-band as a depth-1 shallow clone at the
+        # pinned SHA below. CMake's GIT_SHALLOW cannot checkout a raw commit
+        # SHA, and a full tensorflow clone is multi-GB (won't finish in a
+        # bounded build window). Pre-fetched: git fetch --depth 1 origin <SHA>.
+        #   SHA: 862baf45439c742ac3a9d43e88088943bd3a582d # Updated on 2026-03-18
+        DOWNLOAD_COMMAND ""
+        SOURCE_DIR      "${TENSORFLOW_SOURCE_DIR}"
         PREFIX          "${TFLITE_EXT_PREFIX}"
         SOURCE_SUBDIR   "tensorflow/lite"
 

@@ -32,6 +32,14 @@ file(GLOB_RECURSE SP_SOURCES
 foreach(FILE_PATH ${SP_SOURCES})
     file(READ "${FILE_PATH}" CONTENT)
 
+    # gcc 13+ no longer transitively includes <cstdint>; sentencepiece uses
+    # uintN_t/intN_t without including it. Inject the header where missing.
+    if(CONTENT MATCHES "(u?int(8|16|32|64)_t)" AND NOT CONTENT MATCHES "#include <cstdint>")
+        set(CONTENT "#include <cstdint>\n${CONTENT}")
+        file(WRITE "${FILE_PATH}" "${CONTENT}")
+        message(STATUS "  - Injected <cstdint>: ${FILE_PATH}")
+    endif()
+
     if(CONTENT MATCHES "SharedBitGen")
         string(REPLACE "absl::SharedBitGen" "absl::BitGen" CONTENT "${CONTENT}")
         if(NOT CONTENT MATCHES "#include \"absl/random/random.h\"")

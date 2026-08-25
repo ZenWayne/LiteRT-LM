@@ -2535,16 +2535,10 @@ LlmLiteRtNpuCompiledModelExecutor::Create(
   LITERT_ASSIGN_OR_RETURN(
       auto logits_tensor,
       decode_signature.OutputTensor(LlmSignatures::kDecodeLogitsOutput));
-  if (logits_tensor.HasQuantization()) {
-    auto q_params = logits_tensor.PerTensorQuantization();
-    quantization_params.scale = q_params.scale;
-    quantization_params.zero_point = static_cast<int32_t>(q_params.zero_point);
-    ABSL_LOG(INFO) << "Logits quantization params from '" << kDecodeSignature
-                   << "' signature: scale=" << quantization_params.scale
-                   << " zero_point=" << quantization_params.zero_point;
-  } else {
-    ABSL_LOG(WARNING) << "No quantization for logits in '" << kDecodeSignature
-                      << "' signature (using default scale= "
+  // [LiteRTLM-patch] HasQuantization/PerTensorQuantization not in this LiteRT version
+  {
+    ABSL_LOG(WARNING) << "Quantization check skipped for logits in '"
+                      << kDecodeSignature << "' signature (using default scale= "
                       << quantization_params.scale
                       << ", zero_point= " << quantization_params.zero_point
                       << ").";

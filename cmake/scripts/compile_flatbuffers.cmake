@@ -23,12 +23,23 @@ endif()
 
 foreach(FBS_FILE ${FBS_FILES})
     get_filename_component(FBS_DIR "${FBS_FILE}" DIRECTORY)
-    execute_process(
-        COMMAND ${FLATC_BIN} --cpp --gen-object-api --reflect-names --gen-mutable -o "${FBS_DIR}" "${FBS_FILE}"
-        RESULT_VARIABLE RET_CODE
-    )
+    # Retry to absorb build-graph races where flatc or the .fbs aren't ready.
+    set(RET_CODE 1)
+    foreach(_attempt RANGE 1 5)
+        execute_process(
+            COMMAND ${FLATC_BIN} --cpp --gen-object-api --reflect-names --gen-mutable -o "${FBS_DIR}" "${FBS_FILE}"
+            RESULT_VARIABLE RET_CODE
+            OUTPUT_VARIABLE _flatc_out
+            ERROR_VARIABLE _flatc_err
+        )
+        if(RET_CODE EQUAL 0)
+            break()
+        endif()
+        message(WARNING "[LiteRTLM] flatc attempt ${_attempt} failed (code ${RET_CODE}) on ${FBS_FILE}:\n${_flatc_out}\n${_flatc_err}")
+        execute_process(COMMAND ${CMAKE_COMMAND} -E sleep 2)
+    endforeach()
 
     if(NOT RET_CODE EQUAL 0)
-        message(FATAL_ERROR "Failed to compile ${FBS_FILE}")
+        message(FATAL_ERROR "Failed to compile ${FBS_FILE}\nstdout:\n${_flatc_out}\nstderr:\n${_flatc_err}")
     endif()
 endforeach()

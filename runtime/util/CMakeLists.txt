@@ -282,6 +282,26 @@ target_link_libraries(runtime_util_logging_tensor_buffer
 )
 
 # ==============================================================================
+# 11b. Log Tensor Buffer
+# ==============================================================================
+add_litertlm_library(runtime_util_log_tensor_buffer STATIC
+  log_tensor_buffer.cc
+)
+add_library(LiteRTLM::Runtime::Util::LogTensorBuffer ALIAS runtime_util_log_tensor_buffer)
+
+target_include_directories(runtime_util_log_tensor_buffer
+  PRIVATE
+    ${GENERATED_SRC_DIR}
+    ${LITERTLM_INCLUDE_PATHS}
+    ${LITERT_INCLUDE_PATHS}
+)
+
+target_link_libraries(runtime_util_log_tensor_buffer
+  PUBLIC
+    LITERTLM_DEPS
+)
+
+# ==============================================================================
 # 12. LoRA Util
 # ==============================================================================
 add_litertlm_library(runtime_util_lora_util STATIC
@@ -446,6 +466,7 @@ target_link_libraries(runtime_util_libs INTERFACE
   LiteRTLM::Runtime::Util::FileUtil
   LiteRTLM::Runtime::Util::LMLoader
   LiteRTLM::Runtime::Util::LoggingTensorBuffer
+  LiteRTLM::Runtime::Util::LogTensorBuffer
   LiteRTLM::Runtime::Util::LoRAData
   LiteRTLM::Runtime::Util::LoRAUtil
   LiteRTLM::Runtime::Util::MemoryMappedFile
