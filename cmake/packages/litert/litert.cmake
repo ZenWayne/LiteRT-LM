@@ -23,6 +23,12 @@ include("${LITERTLM_SENTENCEPIECE_CONFIG_PATH}")
 
 set(LITERTLM_LITERT_EXTERNAL_DONE ${LITERTLM_LITERT_STAMP_DIR}/litert_external-done CACHE INTERNAL "")
 
+# Samsung NPU dispatch is an Android/ARM vendor path that a CPU-only build never
+# loads, and GCC 16.1 ICEs compiling samsung/ai_litecore_manager.cc at -O3.
+# Default it off; litert_patcher.cmake removes upstream's FORCE clobber so this
+# value is actually honoured.
+option(LITERTLM_LITERT_ENABLE_SAMSUNG "Build the LiteRT Samsung NPU dispatch backend" OFF)
+
 include(ExternalProject)
 if(NOT EXISTS "${LITERTLM_LITERT_EXTERNAL_DONE}")
   if(TARGET fetch_content_complete)
@@ -175,6 +181,7 @@ if(NOT EXISTS "${LITERTLM_LITERT_EXTERNAL_DONE}")
         -DLITERT_ENABLE_GPU=OFF
         -DLITERT_ENABLE_NPU=ON
         -DLITERT_ENABLE_QUALCOMM=ON
+        -DLITERT_ENABLE_SAMSUNG=${LITERTLM_LITERT_ENABLE_SAMSUNG}
         -DLITERT_DISABLE_KLEIDIAI=ON
         -DLITERT_BUILD_C_API=ON
         -DLITERT_BUILD_TOOLS=OFF
