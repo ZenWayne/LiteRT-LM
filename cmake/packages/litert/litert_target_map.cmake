@@ -30,9 +30,6 @@ set(LITERTLM_LITERT_TARGET_MAP
     "litert::litert_tool_flags_qualcomm=${LITERTLM_LITERT_BUILD_DIR}/tools/flags/vendors/liblitert_tool_flags_qualcomm.a"
     "litert::litert_options_parser_registry=${LITERTLM_LITERT_BUILD_DIR}/tools/flags/vendors/liblitert_options_parser_registry.a"
     "litert::litert_tool_flags_types=${LITERTLM_LITERT_BUILD_DIR}/tools/flags/liblitert_tool_flags_types.a"
-    "litert::samsung_soc_model=${LITERTLM_LITERT_BUILD_DIR}/vendors/samsung/libsamsung_soc_model.a"
-    "litert::samsung_byte_code=${LITERTLM_LITERT_BUILD_DIR}/vendors/samsung/schema/libsamsung_byte_code.a"
-    "litert::samsung_ai_litecore_manager=${LITERTLM_LITERT_BUILD_DIR}/vendors/samsung/libsamsung_ai_litecore_manager.a"
     "litert::qnn_saver_utils=${LITERTLM_LITERT_BUILD_DIR}/vendors/qualcomm/libqnn_saver_utils.a"
     "litert::qnn_manager=${LITERTLM_LITERT_BUILD_DIR}/vendors/qualcomm/libqnn_manager.a"
     "litert::qnn_context_binary_info=${LITERTLM_LITERT_BUILD_DIR}/vendors/qualcomm/libqnn_context_binary_info.a"
@@ -54,3 +51,17 @@ set(LITERTLM_LITERT_TARGET_MAP
     "litert::litert_core_cache=${LITERTLM_LITERT_BUILD_DIR}/core/cache/liblitert_core_cache.a"
     "litert::litert_core_model=${LITERTLM_LITERT_BUILD_DIR}/core/model/liblitert_core_model.a"
 )
+
+# The Samsung NPU dispatch archives only exist when LITERT_ENABLE_SAMSUNG is ON.
+# These paths land in INTERFACE_LINK_LIBRARIES verbatim, so listing them
+# unconditionally makes the litert_lm_main link fail with
+#   "No rule to make target .../vendors/samsung/libsamsung_soc_model.a"
+# whenever Samsung is off. Note liblitert_tool_flags_samsung.a is NOT in here:
+# it is built either way (flags only, no ai_litecore_manager dependency).
+if(LITERTLM_LITERT_ENABLE_SAMSUNG)
+    list(APPEND LITERTLM_LITERT_TARGET_MAP
+        "litert::samsung_soc_model=${LITERTLM_LITERT_BUILD_DIR}/vendors/samsung/libsamsung_soc_model.a"
+        "litert::samsung_byte_code=${LITERTLM_LITERT_BUILD_DIR}/vendors/samsung/schema/libsamsung_byte_code.a"
+        "litert::samsung_ai_litecore_manager=${LITERTLM_LITERT_BUILD_DIR}/vendors/samsung/libsamsung_ai_litecore_manager.a"
+    )
+endif()
