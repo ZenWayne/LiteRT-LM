@@ -53,6 +53,11 @@ struct LiteRtLmConversation {
   // This field stores the result of the last call to
   // `litert_lm_conversation_render_preface_to_string`.
   std::string last_rendered_preface;
+  // Agentflow extension: when non-empty, the Lark grammar to attach as the
+  // decoding constraint on every send. Populated by
+  // `litert_lm_engine_create_constrained_conversation`; left empty by the
+  // existing constructors so unconstrained sends keep working unchanged.
+  std::string lark_grammar;
 };
 
 struct LiteRtLmJsonResponse {
