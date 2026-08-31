@@ -207,6 +207,8 @@ void litert_lm_set_min_log_level(LiteRtLmLogSeverity level) {
 
 SamplerParameters::Type ToSamplerParametersType(LiteRtLmSamplerType type) {
   switch (type) {
+    case kLiteRtLmSamplerTypeUnspecified:
+      return SamplerParameters::TYPE_UNSPECIFIED;
     case kLiteRtLmSamplerTypeTopK:
       return SamplerParameters::TOP_K;
     case kLiteRtLmSamplerTypeTopP:
@@ -562,6 +564,13 @@ void litert_lm_engine_settings_set_max_num_images(
   }
 }
 
+void litert_lm_engine_settings_set_max_vision_tokens_per_image(
+    LiteRtLmEngineSettings* settings, int max_vision_tokens_per_image) {
+  if (settings && settings->settings) {
+    settings->settings->SetMaxVisionTokensPerImage(max_vision_tokens_per_image);
+  }
+}
+
 void litert_lm_engine_settings_set_cache_dir(LiteRtLmEngineSettings* settings,
                                              const char* cache_dir) {
   if (settings && settings->settings) {
@@ -761,6 +770,20 @@ void litert_lm_engine_settings_set_enable_ynnpack(
     }
     config->enable_ynnpack = enable_ynnpack;
     main_settings.SetBackendConfig(*config);
+  }
+}
+
+void litert_lm_engine_settings_set_gpu_enable_metal_residency_set(
+    LiteRtLmEngineSettings* settings, bool enable_metal_residency_set) {
+  if (settings && settings->settings) {
+    auto advanced_settings =
+        settings->settings->GetMainExecutorSettings()
+            .GetAdvancedSettings()
+            .value_or(litert::lm::AdvancedSettings());
+    advanced_settings.gpu_enable_metal_residency_set =
+        enable_metal_residency_set;
+    settings->settings->GetMutableMainExecutorSettings().SetAdvancedSettings(
+        advanced_settings);
   }
 }
 

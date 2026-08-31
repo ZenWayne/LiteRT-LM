@@ -27,7 +27,9 @@
 #include "c/conversation_internal.h"
 #include "c/engine.h"
 #include "c/engine_internal.h"  // IWYU pragma: keep
+#include "runtime/components/constrained_decoding/constraint_provider_config.h"
 #include "runtime/components/constrained_decoding/llg_constraint_config.h"
+#include "runtime/components/constrained_decoding/llguidance_schema_utils.h"
 #include "runtime/components/prompt_template.h"
 #include "runtime/conversation/conversation.h"
 #include "runtime/conversation/io_types.h"
@@ -89,7 +91,10 @@ litert::lm::OptionalArgs CreateOptionalArgs(
   if (extra_context) {
     auto extra_context_json =
         nlohmann::ordered_json::parse(extra_context, nullptr, false);
-    if (!extra_context_json.is_null() && !extra_context_json.empty()) {
+    // A discarded value (e.g. from an empty or malformed string) must not be
+    // forwarded — it corrupts the prompt template inputs downstream.
+    if (!extra_context_json.is_discarded() && !extra_context_json.is_null() &&
+        !extra_context_json.empty()) {
       litert_lm_optional_args.extra_context = extra_context_json;
     }
   }
@@ -670,6 +675,152 @@ int litert_lm_conversation_get_token_count(LiteRtLmConversation* conversation) {
     return -1;
   }
   return *token_count;
+}
+
+// ── Agentflow extension: LLGuidance-backed constrained conversation ──────────
+
+LiteRtLmConversation* litert_lm_engine_create_constrained_conversation(
+    LiteRtLmEngine* engine,
+    const char* system_message_json,
+    const char* tools_json) {
+  if (!engine || !engine->engine) {
+    return nullptr;
+  }
+
+  // Build the JsonPreface — same shape as litert_lm_conversation_config_create.
+  litert::lm::JsonPreface json_preface;
+  if (system_message_json) {
+    nlohmann::ordered_json system_message;
+    system_message["role"] = "system";
+    auto content =
+        nlohmann::ordered_json::parse(system_message_json, nullptr, false);
+    if (content.is_discarded()) {
+      system_message["content"] = system_message_json;
+    } else {
+      system_message["content"] = content;
+    }
+    json_preface.messages = nlohmann::ordered_json::array({system_message});
+  }
+  if (tools_json) {
+    auto parsed =
+        nlohmann::ordered_json::parse(tools_json, nullptr, false);
+    if (!parsed.is_discarded() && parsed.is_array()) {
+      json_preface.tools = parsed;
+    }
+  }
+
+  // Build the ConversationConfig with the LLGuidance provider attached.
+  // SetEnableConstrainedDecoding stays false — we drive constraints
+  // per-message via OptionalArgs.decoding_constraint instead, which routes
+  // through the LlgConstraintProvider rather than the stubbed Gemma path.
+  auto config_or = litert::lm::ConversationConfig::Builder()
+                       .SetSessionConfig(litert::lm::SessionConfig::CreateDefault())
+                       .SetPreface(json_preface)
+                       .SetConstraintProviderConfig(
+                           litert::lm::LlGuidanceConfig{})
+                       .Build(*engine->engine);
+  if (!config_or.ok()) {
+    ABSL_LOG(ERROR) << "Failed to create constrained conversation config: "
+                    << config_or.status();
+    return nullptr;
+  }
+
+  auto conv_or = litert::lm::Conversation::Create(*engine->engine, *config_or);
+  if (!conv_or.ok()) {
+    ABSL_LOG(ERROR) << "Failed to create constrained conversation: "
+                    << conv_or.status();
+    return nullptr;
+  }
+
+  // Pre-build the Lark grammar from tools. If there are no tools (or grammar
+  // generation fails) we leave lark_grammar empty — send falls through to an
+  // unconstrained send.
+  std::string lark_grammar;
+  if (!json_preface.tools.is_null() && !json_preface.tools.empty()) {
+    // CreateLarkGrammarForTools expects a FLAT tool shape — it reads top-level
+    // tool["name"] and tool["parameters"]. But json_preface.tools is the
+    // OpenAI-nested shape ({"type":"function","function":{"name",...}}) which
+    // must stay nested for the chat template (it renders tool['function']
+    // ['name']). So flatten a copy here: lift each tool["function"] to the top
+    // level. Without this, every tool is skipped → "No tools provided".
+    nlohmann::ordered_json flat_tools = nlohmann::ordered_json::array();
+    for (const auto& tool : json_preface.tools) {
+      if (tool.contains("function") && tool["function"].is_object()) {
+        flat_tools.push_back(tool["function"]);
+      } else {
+        flat_tools.push_back(tool);
+      }
+    }
+    litert::lm::LlgConstraintsOptions opts;
+    // kFc: the Gemma-4 tool-call format (tool_call://... with quoted fields).
+    opts.funcall_format = litert::lm::FuncallFormat::kFc;
+    // kTextAndOrFunctionCalls (not kFunctionCallsOnly): the agent must be able
+    // to EITHER call a tool OR emit a final text answer. kFunctionCallsOnly
+    // forces a function call every turn, so the model can never produce a final
+    // reply and the agent loops until max_iter. In this mode the function-call
+    // portions are still grammar-constrained to the tool schemas.
+    opts.constraint_mode =
+        litert::lm::LlgConstraintMode::kTextAndOrFunctionCalls;
+    // The FC control tokens default to placeholders (<start_function_call>,
+    // <escape>, ...) that don't exist in the model's vocab. Set the model's
+    // actual FC tokens so the grammar's <special_token> rules resolve against
+    // the tokenizer (which now marks these as special — see
+    // SentencePieceTokenizer::GetTokens). These are the Gemma-4 values from the
+    // loaded model config. TODO: plumb from the model's data-processor config
+    // instead of hardcoding once an accessor is exposed.
+    opts.code_fence_start = "<|tool_call>";
+    opts.code_fence_end = "<tool_call|>";
+    opts.open_quote = "<|\"|>";
+    opts.close_quote = "<|\"|>";
+    opts.function_response_start = "<|tool_response>";
+    auto grammar_or =
+        litert::lm::CreateLarkGrammarForTools(flat_tools, opts);
+    if (grammar_or.ok()) {
+      lark_grammar = *std::move(grammar_or);
+    } else {
+      ABSL_LOG(WARNING)
+          << "CreateLarkGrammarForTools failed; constrained conversation "
+             "will send without a grammar. Status: "
+          << grammar_or.status();
+    }
+  }
+
+  auto* c_conv = new LiteRtLmConversation;
+  c_conv->conversation = *std::move(conv_or);
+  c_conv->lark_grammar = std::move(lark_grammar);
+  return c_conv;
+}
+
+LiteRtLmJsonResponse* litert_lm_conversation_send_message_constrained(
+    LiteRtLmConversation* conversation, const char* message_json) {
+  if (!conversation || !conversation->conversation || !message_json) {
+    return nullptr;
+  }
+  nlohmann::json msg =
+      nlohmann::json::parse(message_json, nullptr, /*allow_exceptions=*/false);
+  if (msg.is_discarded()) {
+    ABSL_LOG(ERROR) << "Failed to parse message JSON.";
+    return nullptr;
+  }
+
+  litert::lm::OptionalArgs args;
+  if (!conversation->lark_grammar.empty()) {
+    litert::lm::LlGuidanceConstraintArg llg_arg;
+    llg_arg.constraint_type = litert::lm::LlgConstraintType::kLark;
+    llg_arg.constraint_string = conversation->lark_grammar;
+    args.decoding_constraint = litert::lm::ConstraintArg{llg_arg};
+  }
+
+  auto resp_or =
+      conversation->conversation->SendMessage(msg, std::move(args));
+  if (!resp_or.ok()) {
+    ABSL_LOG(ERROR) << "Constrained send_message failed: "
+                    << resp_or.status();
+    return nullptr;
+  }
+  auto* c_resp = new LiteRtLmJsonResponse;
+  c_resp->json_string = resp_or->dump();
+  return c_resp;
 }
 
 }  // extern "C"

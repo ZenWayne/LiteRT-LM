@@ -14,6 +14,7 @@
 
 #include "runtime/core/embedding_engine_impl.h"
 
+#include <cmath>
 #include <cstddef>
 #include <filesystem>  // NOLINT: Required for path manipulation.
 #include <functional>
@@ -394,6 +395,9 @@ TEST(EmbeddingEngineImplTest, DefaultEmbeddingOptions) {
   EmbeddingOptions options;
   EXPECT_TRUE(options.normalize);
   EXPECT_TRUE(options.insert_special_tokens);
+  EXPECT_EQ(options.input_overflow_strategy, InputOverflowStrategy::kError);
+  EXPECT_FALSE(options.vision_tokens_per_image.has_value());
+  EXPECT_EQ(options.output_size, std::nullopt);
 }
 
 TEST(EmbeddingEngineImplTest, ComputeEmbeddingSuccess) {
@@ -925,6 +929,179 @@ TEST(EmbeddingEngineImplTest,
   EXPECT_THAT(raw_executor->GetLastTokenIds(), ElementsAre(-1, -1, -1, -1));
 }
 
+TEST(EmbeddingEngineImplTest, ComputeEmbeddingWithOutputSize) {
+  ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
+  auto tokenizer = std::make_unique<MockTokenizer>();
+  ON_CALL(*tokenizer, TextToTokenIds(::testing::_))
+      .WillByDefault(Return(std::vector<int>{1, 2, 3}));
+  auto fake_embedding_executor = std::make_unique<FakeEmbeddingExecutor>();
+
+  EmbeddingEngineImpl engine(std::move(env), std::move(tokenizer),
+                             std::move(fake_embedding_executor));
+
+  std::vector<InputData> contents;
+  contents.push_back(InputText(std::string("hello")));
+
+  EmbeddingOptions options;
+  options.normalize = false;
+  options.output_size = 2;
+
+  ASSERT_OK_AND_ASSIGN(auto response,
+                       engine.ComputeEmbedding(contents, options));
+  EXPECT_THAT(response.embedding, ElementsAre(1.0f, 2.0f));
+}
+
+TEST(EmbeddingEngineImplTest, ComputeEmbeddingWithOutputSizeAndNormalization) {
+  ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
+  auto tokenizer = std::make_unique<MockTokenizer>();
+  ON_CALL(*tokenizer, TextToTokenIds(::testing::_))
+      .WillByDefault(Return(std::vector<int>{1, 2, 3}));
+  auto fake_embedding_executor = std::make_unique<FakeEmbeddingExecutor>();
+
+  EmbeddingEngineImpl engine(std::move(env), std::move(tokenizer),
+                             std::move(fake_embedding_executor));
+
+  std::vector<InputData> contents;
+  contents.push_back(InputText(std::string("hello")));
+
+  EmbeddingOptions options;
+  options.normalize = true;
+  options.output_size = 2;
+
+  ASSERT_OK_AND_ASSIGN(auto response,
+                       engine.ComputeEmbedding(contents, options));
+  ASSERT_EQ(response.embedding.size(), 2);
+  const float norm = std::sqrt(1.0f * 1.0f + 2.0f * 2.0f);
+  EXPECT_NEAR(response.embedding[0], 1.0f / norm, 1e-5f);
+  EXPECT_NEAR(response.embedding[1], 2.0f / norm, 1e-5f);
+  const float sum_sq = response.embedding[0] * response.embedding[0] +
+                       response.embedding[1] * response.embedding[1];
+  EXPECT_NEAR(sum_sq, 1.0f, 1e-5f);
+}
+
+TEST(EmbeddingEngineImplTest, ComputeEmbeddingWithOutputSizeEqualToDefault) {
+  ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
+  auto tokenizer = std::make_unique<MockTokenizer>();
+  ON_CALL(*tokenizer, TextToTokenIds(::testing::_))
+      .WillByDefault(Return(std::vector<int>{1, 2, 3}));
+  auto fake_embedding_executor = std::make_unique<FakeEmbeddingExecutor>();
+
+  EmbeddingEngineImpl engine(std::move(env), std::move(tokenizer),
+                             std::move(fake_embedding_executor));
+
+  std::vector<InputData> contents;
+  contents.push_back(InputText(std::string("hello")));
+
+  EmbeddingOptions options;
+  options.normalize = false;
+  options.output_size = 3;
+
+  ASSERT_OK_AND_ASSIGN(auto response,
+                       engine.ComputeEmbedding(contents, options));
+  EXPECT_THAT(response.embedding, ElementsAre(1.0f, 2.0f, 3.0f));
+}
+
+TEST(EmbeddingEngineImplTest, ComputeEmbeddingWithOutputSizeZero) {
+  ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
+  auto tokenizer = std::make_unique<MockTokenizer>();
+  ON_CALL(*tokenizer, TextToTokenIds(::testing::_))
+      .WillByDefault(Return(std::vector<int>{1, 2, 3}));
+  auto fake_embedding_executor = std::make_unique<FakeEmbeddingExecutor>();
+
+  EmbeddingEngineImpl engine(std::move(env), std::move(tokenizer),
+                             std::move(fake_embedding_executor));
+
+  std::vector<InputData> contents;
+  contents.push_back(InputText(std::string("hello")));
+
+  EmbeddingOptions options;
+  options.output_size = 0;
+
+  ASSERT_OK_AND_ASSIGN(auto response,
+                       engine.ComputeEmbedding(contents, options));
+  EXPECT_TRUE(response.embedding.empty());
+}
+
+TEST(EmbeddingEngineImplTest,
+     ComputeEmbeddingWithOutputSizeNegativeReturnsError) {
+  ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
+  auto tokenizer = std::make_unique<MockTokenizer>();
+  ON_CALL(*tokenizer, TextToTokenIds(::testing::_))
+      .WillByDefault(Return(std::vector<int>{1, 2, 3}));
+  auto fake_embedding_executor = std::make_unique<FakeEmbeddingExecutor>();
+
+  EmbeddingEngineImpl engine(std::move(env), std::move(tokenizer),
+                             std::move(fake_embedding_executor));
+
+  std::vector<InputData> contents;
+  contents.push_back(InputText(std::string("hello")));
+
+  EmbeddingOptions options;
+  options.output_size = -1;
+
+  EXPECT_THAT(engine.ComputeEmbedding(contents, options),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("cannot be negative")));
+}
+
+TEST(EmbeddingEngineImplTest,
+     ComputeEmbeddingWithOutputSizeLargerThanDefaultReturnsError) {
+  ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
+  auto tokenizer = std::make_unique<MockTokenizer>();
+  ON_CALL(*tokenizer, TextToTokenIds(::testing::_))
+      .WillByDefault(Return(std::vector<int>{1, 2, 3}));
+  auto fake_embedding_executor = std::make_unique<FakeEmbeddingExecutor>();
+
+  EmbeddingEngineImpl engine(std::move(env), std::move(tokenizer),
+                             std::move(fake_embedding_executor));
+
+  std::vector<InputData> contents;
+  contents.push_back(InputText(std::string("hello")));
+
+  EmbeddingOptions options;
+  options.output_size = 5;
+
+  EXPECT_THAT(
+      engine.ComputeEmbedding(contents, options),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("cannot be larger than default output embedding size")));
+}
+
+TEST(EmbeddingEngineImplTest,
+     ComputeEmbeddingBatchWithOutputSizeAndNormalization) {
+  ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
+  auto tokenizer = std::make_unique<MockTokenizer>();
+  ON_CALL(*tokenizer, TextToTokenIds(::testing::_))
+      .WillByDefault(Return(std::vector<int>{1, 2, 3}));
+  auto fake_embedding_executor = std::make_unique<FakeEmbeddingExecutor>();
+
+  EmbeddingEngineImpl engine(std::move(env), std::move(tokenizer),
+                             std::move(fake_embedding_executor));
+
+  std::vector<std::vector<InputData>> contents;
+  std::vector<InputData> contents1;
+  contents1.push_back(InputText(std::string("hello")));
+  contents.push_back(std::move(contents1));
+  std::vector<InputData> contents2;
+  contents2.push_back(InputText(std::string("world")));
+  contents.push_back(std::move(contents2));
+
+  EmbeddingOptions options;
+  options.normalize = true;
+  options.output_size = 2;
+
+  ASSERT_OK_AND_ASSIGN(auto responses,
+                       engine.ComputeEmbeddingBatch(contents, options));
+  ASSERT_EQ(responses.size(), 2);
+  const float norm = std::sqrt(1.0f * 1.0f + 2.0f * 2.0f);
+  for (const auto& response : responses) {
+    ASSERT_EQ(response.embedding.size(), 2);
+    EXPECT_NEAR(response.embedding[0], 1.0f / norm, 1e-5f);
+    EXPECT_NEAR(response.embedding[1], 2.0f / norm, 1e-5f);
+  }
+}
+
 TEST(EmbeddingEngineImplTest, ComputeEmbeddingWithRawImageSuccess) {
   ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
   ASSERT_OK_AND_ASSIGN(auto image_tensor,
@@ -978,6 +1155,103 @@ TEST(EmbeddingEngineImplTest, ComputeEmbeddingWithRawImageSuccess) {
                 ->GetPatchifyConfig()
                 ->pooling_kernel_size,
             3);
+}
+
+TEST(EmbeddingEngineImplTest,
+     ComputeEmbeddingWithRawImageOverridingVisionTokensPerImage) {
+  ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
+  ASSERT_OK_AND_ASSIGN(auto image_tensor,
+                       CreateDummyTensorBuffer(env->env, {1, 224, 224, 3}));
+  auto tokenizer = std::make_unique<MockTokenizer>();
+  auto fake_embedding_executor = std::make_unique<FakeEmbeddingExecutor>();
+  auto* raw_executor = fake_embedding_executor.get();
+
+  auto fake_image_preprocessor =
+      std::make_unique<FakeImagePreprocessor>(std::move(image_tensor));
+  auto* raw_image_preprocessor = fake_image_preprocessor.get();
+
+  ImagePreprocessParameter parameter;
+  parameter.SetPatchifyConfig(ImagePreprocessParameter::PatchifyConfig{
+      .patch_width = 16,
+      .patch_height = 16,
+      .max_num_patches = 2520,
+      .pooling_kernel_size = 3,
+  });
+
+  EmbeddingEngineImpl engine(
+      std::move(env), std::move(tokenizer), std::move(fake_embedding_executor),
+      std::make_unique<FakeVisionExecutor>(),
+      /*audio_executor=*/nullptr,
+      /*benchmark_info=*/std::nullopt,
+      /*special_tokens=*/{}, std::move(fake_image_preprocessor), parameter);
+
+  std::vector<InputData> contents;
+  contents.push_back(InputImage(std::string("raw_image_bytes")));
+
+  EmbeddingOptions options;
+  options.insert_special_tokens = false;
+  options.vision_tokens_per_image = 70;
+
+  ASSERT_OK(engine.ComputeEmbedding(contents, options).status());
+  EXPECT_THAT(raw_executor->GetLastTokenIds(), ElementsAre(-1, -1, -1, -1));
+  ASSERT_TRUE(raw_image_preprocessor->GetLastParameter().has_value());
+  EXPECT_EQ(raw_image_preprocessor->GetLastParameter()
+                ->GetPatchifyConfig()
+                ->patch_width,
+            16);
+  EXPECT_EQ(raw_image_preprocessor->GetLastParameter()
+                ->GetPatchifyConfig()
+                ->patch_height,
+            16);
+  // max_num_patches = vision_tokens_per_image (70) * pooling_kernel_size^2 (9)
+  // = 630.
+  EXPECT_EQ(raw_image_preprocessor->GetLastParameter()
+                ->GetPatchifyConfig()
+                ->max_num_patches,
+            630);
+  EXPECT_EQ(raw_image_preprocessor->GetLastParameter()
+                ->GetPatchifyConfig()
+                ->pooling_kernel_size,
+            3);
+}
+
+TEST(EmbeddingEngineImplTest,
+     ComputeEmbeddingWithInvalidVisionTokensPerImageFails) {
+  ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
+  ASSERT_OK_AND_ASSIGN(auto image_tensor,
+                       CreateDummyTensorBuffer(env->env, {1, 224, 224, 3}));
+  auto tokenizer = std::make_unique<MockTokenizer>();
+  auto fake_embedding_executor = std::make_unique<FakeEmbeddingExecutor>();
+  auto fake_image_preprocessor =
+      std::make_unique<FakeImagePreprocessor>(std::move(image_tensor));
+
+  ImagePreprocessParameter parameter;
+  parameter.SetPatchifyConfig(ImagePreprocessParameter::PatchifyConfig{
+      .patch_width = 16,
+      .patch_height = 16,
+      .max_num_patches = 2520,
+      .pooling_kernel_size = 3,
+  });
+
+  EmbeddingEngineImpl engine(
+      std::move(env), std::move(tokenizer), std::move(fake_embedding_executor),
+      std::make_unique<FakeVisionExecutor>(),
+      /*audio_executor=*/nullptr,
+      /*benchmark_info=*/std::nullopt,
+      /*special_tokens=*/{}, std::move(fake_image_preprocessor), parameter);
+
+  std::vector<InputData> contents;
+  contents.push_back(InputImage(std::string("raw_image_bytes")));
+
+  EmbeddingOptions options_zero;
+  options_zero.vision_tokens_per_image = 0;
+  EXPECT_THAT(engine.ComputeEmbedding(contents, options_zero),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+
+  EmbeddingOptions options_negative;
+  options_negative.vision_tokens_per_image = -5;
+  EXPECT_THAT(engine.ComputeEmbedding(contents, options_negative),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(EmbeddingEngineImplTest,
@@ -1322,6 +1596,112 @@ TEST(EmbeddingEngineImplTest,
   EXPECT_THAT(raw_executor->GetLastOptions().eos_token_ids, ElementsAre(1));
   EXPECT_EQ(raw_executor->GetLastOptions().input_overflow_strategy,
             InputOverflowStrategy::kTruncate);
+}
+
+TEST(EmbeddingEngineImplTest, CreateWithMaxInputLengthAutoSelectsSignatures) {
+  const std::string& model_path = (std::filesystem::path(::testing::SrcDir()) /
+                                   std::string(kTestEmbeddingModelPath))
+                                      .string();
+  ASSERT_OK_AND_ASSIGN(auto model_assets, ModelAssets::Create(model_path));
+  ASSERT_OK_AND_ASSIGN(auto resources, CreateTestModelResources(model_path));
+  ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
+  auto tokenizer = std::make_unique<MockTokenizer>();
+
+  ASSERT_OK_AND_ASSIGN(auto settings, EmbeddingEngineSettings::CreateDefault(
+                                          model_assets, Backend::CPU));
+  settings.SetMaxInputLength(128);
+
+  ASSERT_OK_AND_ASSIGN(
+      auto engine,
+      EmbeddingEngineImpl::Create(std::move(resources), std::move(env),
+                                  std::move(tokenizer), std::move(settings)));
+  EXPECT_NE(engine, nullptr);
+  const auto& text_sig_info = engine->GetSelectedTextSignaturesInfo();
+  ASSERT_TRUE(text_sig_info.has_value());
+  EXPECT_FALSE(text_sig_info->signature_names.empty());
+  EXPECT_EQ(engine->GetSelectedVisionSignatureInfo(), std::nullopt);
+}
+
+TEST(EmbeddingEngineImplTest,
+     CreateWithoutAutoSelectionHasNulloptSignaturesInfo) {
+  const std::string& model_path = (std::filesystem::path(::testing::SrcDir()) /
+                                   std::string(kTestEmbeddingModelPath))
+                                      .string();
+  ASSERT_OK_AND_ASSIGN(auto model_assets, ModelAssets::Create(model_path));
+  ASSERT_OK_AND_ASSIGN(auto resources, CreateTestModelResources(model_path));
+  ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
+  auto tokenizer = std::make_unique<MockTokenizer>();
+
+  ASSERT_OK_AND_ASSIGN(auto settings, EmbeddingEngineSettings::CreateDefault(
+                                          model_assets, Backend::CPU));
+
+  ASSERT_OK_AND_ASSIGN(
+      auto engine,
+      EmbeddingEngineImpl::Create(std::move(resources), std::move(env),
+                                  std::move(tokenizer), std::move(settings)));
+  EXPECT_NE(engine, nullptr);
+  EXPECT_EQ(engine->GetSelectedTextSignaturesInfo(), std::nullopt);
+  EXPECT_EQ(engine->GetSelectedVisionSignatureInfo(), std::nullopt);
+}
+
+TEST(EmbeddingEngineImplTest, CreateWithInvalidMaxInputLengthReturnsError) {
+  const std::string& model_path = (std::filesystem::path(::testing::SrcDir()) /
+                                   std::string(kTestEmbeddingModelPath))
+                                      .string();
+  ASSERT_OK_AND_ASSIGN(auto model_assets, ModelAssets::Create(model_path));
+  ASSERT_OK_AND_ASSIGN(auto resources, CreateTestModelResources(model_path));
+  ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
+  auto tokenizer = std::make_unique<MockTokenizer>();
+
+  ASSERT_OK_AND_ASSIGN(auto settings, EmbeddingEngineSettings::CreateDefault(
+                                          model_assets, Backend::CPU));
+  settings.SetMaxInputLength(0);
+
+  EXPECT_THAT(
+      EmbeddingEngineImpl::Create(std::move(resources), std::move(env),
+                                  std::move(tokenizer), std::move(settings)),
+      StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(EmbeddingEngineImplTest,
+     CreateWithVisionTokensPerImageWithoutVisionBackendReturnsError) {
+  const std::string& model_path = (std::filesystem::path(::testing::SrcDir()) /
+                                   std::string(kTestEmbeddingModelPath))
+                                      .string();
+  ASSERT_OK_AND_ASSIGN(auto model_assets, ModelAssets::Create(model_path));
+  ASSERT_OK_AND_ASSIGN(auto resources, CreateTestModelResources(model_path));
+  ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
+  auto tokenizer = std::make_unique<MockTokenizer>();
+
+  ASSERT_OK_AND_ASSIGN(auto settings, EmbeddingEngineSettings::CreateDefault(
+                                          model_assets, Backend::CPU));
+  settings.SetVisionTokensPerImage(70);
+
+  EXPECT_THAT(
+      EmbeddingEngineImpl::Create(std::move(resources), std::move(env),
+                                  std::move(tokenizer), std::move(settings)),
+      StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST(EmbeddingEngineImplTest,
+     CreateWithInvalidVisionTokensPerImageReturnsError) {
+  const std::string& model_path = (std::filesystem::path(::testing::SrcDir()) /
+                                   std::string(kTestEmbeddingModelPath))
+                                      .string();
+  ASSERT_OK_AND_ASSIGN(auto model_assets, ModelAssets::Create(model_path));
+  ASSERT_OK_AND_ASSIGN(auto resources, CreateTestModelResources(model_path));
+  ASSERT_OK_AND_ASSIGN(auto env, CreateTestEnvironment());
+  auto tokenizer = std::make_unique<MockTokenizer>();
+
+  ASSERT_OK_AND_ASSIGN(auto settings, EmbeddingEngineSettings::CreateDefault(
+                                          model_assets, Backend::CPU,
+                                          Backend::CPU, std::nullopt));
+  settings.SetVisionTokensPerImage(0);
+
+  EXPECT_THAT(
+      EmbeddingEngineImpl::Create(std::move(resources), std::move(env),
+                                  std::move(tokenizer), std::move(settings)),
+      StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

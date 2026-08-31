@@ -39,6 +39,20 @@ typedef struct LiteRtLmEmbeddingEngine LiteRtLmEmbeddingEngine;
 // Added in version 0.2.0.
 typedef struct LiteRtLmEmbeddingEngineSettings LiteRtLmEmbeddingEngineSettings;
 
+// Strategy for handling inputs longer than the maximum supported signature
+// length.
+//
+// Added in version 0.2.0.
+typedef enum {
+  // Chunks the input into sub-sequences, embeds each chunk, and returns the
+  // mean embedding across all chunks.
+  kLiteRtLmInputOverflowStrategyChunkAndAverage = 0,
+  // Truncates the input to the longest signature length.
+  kLiteRtLmInputOverflowStrategyTruncate = 1,
+  // Returns an error status if the input exceeds the longest signature length.
+  kLiteRtLmInputOverflowStrategyError = 2,
+} LiteRtLmInputOverflowStrategy;
+
 // Opaque pointer for the LiteRT LM Embedding Options.
 //
 // Added in version 0.2.0.
@@ -129,6 +143,30 @@ LITERT_LM_C_API_EXPORT
 void litert_lm_embedding_engine_settings_set_audio_litert_dispatch_lib_dir(
     LiteRtLmEmbeddingEngineSettings* settings, const char* lib_dir);
 
+// Sets the maximum sequence length (in tokens) for text encoder signatures in
+// Embedding Engine Settings.
+//
+// @param settings The embedding engine settings.
+// @param max_input_length The maximum input length. Passing a non-positive
+//   value unsets the option.
+//
+// Added in version 0.2.0.
+LITERT_LM_C_API_EXPORT
+void litert_lm_embedding_engine_settings_set_max_input_length(
+    LiteRtLmEmbeddingEngineSettings* settings, int max_input_length);
+
+// Sets the desired number of vision tokens generated per image in Embedding
+// Engine Settings.
+//
+// @param settings The embedding engine settings.
+// @param vision_tokens_per_image The vision tokens per image. Passing a
+//   non-positive value unsets the option.
+//
+// Added in version 0.2.0.
+LITERT_LM_C_API_EXPORT
+void litert_lm_embedding_engine_settings_set_vision_tokens_per_image(
+    LiteRtLmEmbeddingEngineSettings* settings, int vision_tokens_per_image);
+
 // Creates LiteRT LM Embedding Options with default values (`normalize = true`,
 // `insert_special_tokens = true`). The caller is responsible for destroying
 // options using `litert_lm_embedding_options_delete`.
@@ -188,6 +226,69 @@ LITERT_LM_C_API_EXPORT
 bool litert_lm_embedding_options_get_insert_special_tokens(
     const LiteRtLmEmbeddingOptions* options);
 
+// Sets the input overflow strategy.
+//
+// @param options The options to modify.
+// @param strategy The overflow strategy to use.
+//
+// Added in version 0.2.0.
+LITERT_LM_C_API_EXPORT
+void litert_lm_embedding_options_set_input_overflow_strategy(
+    LiteRtLmEmbeddingOptions* options, LiteRtLmInputOverflowStrategy strategy);
+
+// Gets the input overflow strategy.
+//
+// @param options The options to inspect.
+// @return The overflow strategy configured in options.
+//
+// Added in version 0.2.0.
+LITERT_LM_C_API_EXPORT
+LiteRtLmInputOverflowStrategy
+litert_lm_embedding_options_get_input_overflow_strategy(
+    const LiteRtLmEmbeddingOptions* options);
+
+// Sets the output embedding size to truncate the embedding to.
+//
+// @param options The options to modify.
+// @param output_size The output embedding size to truncate to. Pass 0 or a
+//   negative value (e.g., 0 or -1) to unset and use the default output
+//   embedding size.
+//
+// Added in version 0.2.0.
+LITERT_LM_C_API_EXPORT
+void litert_lm_embedding_options_set_output_size(
+    LiteRtLmEmbeddingOptions* options, int output_size);
+
+// Gets the output embedding size.
+//
+// @param options The options to inspect.
+// @return The output embedding size, or -1 if not set (using default size).
+//
+// Added in version 0.2.0.
+LITERT_LM_C_API_EXPORT
+int litert_lm_embedding_options_get_output_size(
+    const LiteRtLmEmbeddingOptions* options);
+
+// Sets the vision tokens per image.
+//
+// @param options The options to modify.
+// @param vision_tokens_per_image The number of vision tokens per image. Passing
+//   a non-positive value unsets the option.
+//
+// Added in version 0.2.0.
+LITERT_LM_C_API_EXPORT
+void litert_lm_embedding_options_set_vision_tokens_per_image(
+    LiteRtLmEmbeddingOptions* options, int vision_tokens_per_image);
+
+// Gets the vision tokens per image.
+//
+// @param options The options to inspect.
+// @return The vision tokens per image configured in options, or 0 if not set.
+//
+// Added in version 0.2.0.
+LITERT_LM_C_API_EXPORT
+int litert_lm_embedding_options_get_vision_tokens_per_image(
+    const LiteRtLmEmbeddingOptions* options);
 // Destroys a LiteRT LM Embedding Response.
 //
 // @param response The response to destroy.

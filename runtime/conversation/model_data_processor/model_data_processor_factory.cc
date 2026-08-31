@@ -25,6 +25,7 @@
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/status_macros.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
+#include "absl/strings/str_cat.h"  // from @com_google_absl
 #include "litert/cc/litert_layout.h"  // from @litert
 #include "runtime/components/prompt_template.h"
 #include "runtime/conversation/io_types.h"
@@ -235,10 +236,6 @@ absl::StatusOr<DataProcessorConfig> CreateGemma4DataProcessorConfig(
   if (gemma4.function_response_start() !=
       default_gemma4.function_response_start()) {
     config.function_response_start = gemma4.function_response_start();
-  }
-  if (gemma4.use_template_for_fc_format() !=
-      default_gemma4.use_template_for_fc_format()) {
-    config.use_template_for_fc_format = gemma4.use_template_for_fc_format();
   }
   if (gemma4.constraint_mode() != default_gemma4.constraint_mode()) {
     switch (gemma4.constraint_mode()) {
@@ -672,6 +669,32 @@ absl::StatusOr<std::unique_ptr<ModelDataProcessor>> CreateModelDataProcessor(
   } else {
     return absl::InvalidArgumentError("Unsupported data processor config type");
   }
+}
+
+absl::Status ValidateVisualTokenBudget(const DataProcessorArguments& args,
+                                       int max_vision_tokens_per_image) {
+  std::optional<int> visual_token_budget;
+  if (const auto* gemma4_args =
+          std::get_if<Gemma4DataProcessorArguments>(&args)) {
+    visual_token_budget = gemma4_args->visual_token_budget;
+  } else if (const auto* generic_args =
+                 std::get_if<GenericDataProcessorArguments>(&args)) {
+    visual_token_budget = generic_args->visual_token_budget;
+  }
+  if (visual_token_budget.has_value()) {
+    if (*visual_token_budget <= 0) {
+      return absl::InvalidArgumentError(
+          "Visual token budget must be positive.");
+    }
+    if (*visual_token_budget > max_vision_tokens_per_image) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Visual token budget (", *visual_token_budget,
+                       ") cannot be larger than the engine's max vision "
+                       "tokens per image (",
+                       max_vision_tokens_per_image, ")."));
+    }
+  }
+  return absl::OkStatus();
 }
 
 }  // namespace litert::lm

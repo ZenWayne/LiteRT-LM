@@ -69,6 +69,8 @@ class EmbeddingEngine(val config: EmbeddingEngineConfig) : AutoCloseable {
           (config.audioBackend as? Backend.NPU)?.nativeLibraryDir ?: "",
           mainBackendNumThreads,
           audioBackendNumThreads,
+          config.maxInputLength ?: -1,
+          config.visionTokensPerImage ?: -1,
         )
     }
   }
@@ -93,6 +95,8 @@ class EmbeddingEngine(val config: EmbeddingEngineConfig) : AutoCloseable {
         contents.toTypedArray(),
         options.normalize,
         options.insertSpecialTokens,
+        options.outputSize,
+        options.visionTokensPerImage,
       )
     }
   }
@@ -118,6 +122,8 @@ class EmbeddingEngine(val config: EmbeddingEngineConfig) : AutoCloseable {
           nativeBatch,
           options.normalize,
           options.insertSpecialTokens,
+          options.outputSize,
+          options.visionTokensPerImage,
         )
         .toList()
     }

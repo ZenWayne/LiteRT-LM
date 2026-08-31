@@ -26,6 +26,10 @@ public struct EmbeddingEngineConfig: Hashable, Sendable {
   public let audioBackend: Backend?
   /// The directory for placing cache files. If `nil`, it uses the directory of the `modelPath`.
   public let cacheDir: String?
+  /// Maximum sequence length (in tokens) for text encoder signatures.
+  public let maxInputLength: Int?
+  /// Desired number of vision tokens generated per image.
+  public let visionTokensPerImage: Int?
 
   /// - Parameters:
   ///   - modelPath: The file path to the LiteRT-LM embedding model.
@@ -33,18 +37,24 @@ public struct EmbeddingEngineConfig: Hashable, Sendable {
   ///   - visionBackend: The backend to use for the vision encoder.
   ///   - audioBackend: The backend to use for the audio encoder.
   ///   - cacheDir: The directory for placing cache files.
+  ///   - maxInputLength: Maximum sequence length (in tokens) for text encoder signatures.
+  ///   - visionTokensPerImage: Desired number of vision tokens generated per image.
   public init(
     modelPath: String,
     backend: Backend = .cpu(),
     visionBackend: Backend? = nil,
     audioBackend: Backend? = nil,
-    cacheDir: String? = nil
+    cacheDir: String? = nil,
+    maxInputLength: Int? = nil,
+    visionTokensPerImage: Int? = nil
   ) {
     self.modelPath = modelPath
     self.backend = backend
     self.visionBackend = visionBackend
     self.audioBackend = audioBackend
     self.cacheDir = cacheDir
+    self.maxInputLength = maxInputLength
+    self.visionTokensPerImage = visionTokensPerImage
   }
 }
 
@@ -56,12 +66,30 @@ public struct EmbeddingOptions: Hashable, Sendable {
   /// Whether to automatically insert special tokens (BOS, EOS, start/end of image, start/end of audio). If `nil`, uses the C++ engine default.
   public let insertSpecialTokens: Bool?
 
+  /// The output embedding size to truncate the embedding to. If `nil`, uses the C++ engine default.
+  public let outputSize: Int?
+
+  /// The number of vision soft tokens to generate per image.
+  ///
+  /// If `nil`, uses the C++ engine default.
+  public let visionTokensPerImage: Int?
+
   /// - Parameters:
   ///   - normalize: Whether to L2-normalize the output embedding vector. If `nil`, uses the C++ engine default.
   ///   - insertSpecialTokens: Whether to automatically insert special tokens. If `nil`, uses the C++ engine default.
-  public init(normalize: Bool? = nil, insertSpecialTokens: Bool? = nil) {
+  ///   - outputSize: The output embedding size to truncate to. If `nil`, uses the C++ engine default.
+  ///   - visionTokensPerImage: The number of vision soft tokens to generate per image. If `nil`,
+  ///     uses the C++ engine default.
+  public init(
+    normalize: Bool? = nil,
+    insertSpecialTokens: Bool? = nil,
+    outputSize: Int? = nil,
+    visionTokensPerImage: Int? = nil
+  ) {
     self.normalize = normalize
     self.insertSpecialTokens = insertSpecialTokens
+    self.outputSize = outputSize
+    self.visionTokensPerImage = visionTokensPerImage
   }
 }
 

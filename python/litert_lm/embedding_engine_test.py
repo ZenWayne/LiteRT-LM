@@ -45,12 +45,56 @@ class EmbeddingEngineTest(parameterized.TestCase):
     opts_default = litert_lm.EmbeddingOptions()
     self.assertIsNone(opts_default.normalize)
     self.assertIsNone(opts_default.insert_special_tokens)
+    self.assertIsNone(opts_default.input_overflow_strategy)
+    self.assertIsNone(opts_default.output_size)
+    self.assertIsNone(opts_default.vision_tokens_per_image)
 
     opts_custom = litert_lm.EmbeddingOptions(
-        normalize=False, insert_special_tokens=True
+        normalize=False,
+        insert_special_tokens=True,
+        input_overflow_strategy=litert_lm.InputOverflowStrategy.TRUNCATE,
+        output_size=128,
+        vision_tokens_per_image=70,
     )
     self.assertFalse(opts_custom.normalize)
     self.assertTrue(opts_custom.insert_special_tokens)
+    self.assertEqual(
+        opts_custom.input_overflow_strategy,
+        litert_lm.InputOverflowStrategy.TRUNCATE,
+    )
+    self.assertEqual(opts_custom.output_size, 128)
+    self.assertEqual(opts_custom.vision_tokens_per_image, 70)
+
+  def test_compute_embedding_with_output_size(self):
+    engine = litert_lm.EmbeddingEngine(
+        model_path=self.model_path, backend=litert_lm.Backend.CPU()
+    )
+    try:
+      response = engine.compute_embedding(
+          contents="'s",
+          options=litert_lm.EmbeddingOptions(normalize=True, output_size=64),
+      )
+      self.assertIsInstance(response, litert_lm.EmbeddingResponse)
+      self.assertLen(response.embedding, 64)
+      norm = math.sqrt(sum(x * x for x in response.embedding))
+      self.assertAlmostEqual(norm, 1.0, places=4)
+    finally:
+      engine.close()
+
+  def test_compute_embedding_batch_with_output_size(self):
+    engine = litert_lm.EmbeddingEngine(
+        model_path=self.model_path, backend=litert_lm.Backend.CPU()
+    )
+    try:
+      responses = engine.compute_embedding_batch(
+          contents_batch=["'s", "'s"],
+          options=litert_lm.EmbeddingOptions(normalize=True, output_size=64),
+      )
+      self.assertLen(responses, 2)
+      self.assertLen(responses[0].embedding, 64)
+      self.assertLen(responses[1].embedding, 64)
+    finally:
+      engine.close()
 
   def test_compute_embedding_single(self):
     engine = litert_lm.EmbeddingEngine(
@@ -67,6 +111,22 @@ class EmbeddingEngineTest(parameterized.TestCase):
       # Verify L2 normalization
       norm = math.sqrt(sum(x * x for x in response.embedding))
       self.assertAlmostEqual(norm, 1.0, places=4)
+    finally:
+      engine.close()
+
+  def test_compute_embedding_with_overflow_strategy(self):
+    engine = litert_lm.EmbeddingEngine(
+        model_path=self.model_path, backend=litert_lm.Backend.CPU()
+    )
+    try:
+      response = engine.compute_embedding(
+          contents="'s",
+          options=litert_lm.EmbeddingOptions(
+              input_overflow_strategy=litert_lm.InputOverflowStrategy.TRUNCATE
+          ),
+      )
+      self.assertIsInstance(response, litert_lm.EmbeddingResponse)
+      self.assertNotEmpty(response.embedding)
     finally:
       engine.close()
 
@@ -108,6 +168,27 @@ class EmbeddingEngineTest(parameterized.TestCase):
     ) as engine:
       response = engine.compute_embedding("'s")
       self.assertNotEmpty(response.embedding)
+
+  def test_max_input_length_and_vision_tokens_properties(self):
+    engine = litert_lm.EmbeddingEngine(
+        model_path=self.model_path,
+        backend=litert_lm.Backend.CPU(),
+        max_input_length=512,
+    )
+    try:
+      self.assertEqual(engine.max_input_length, 512)
+      self.assertIsNone(engine.vision_tokens_per_image)
+      response = engine.compute_embedding("'s")
+      self.assertNotEmpty(response.embedding)
+    finally:
+      engine.close()
+
+    with self.assertRaises(RuntimeError):
+      litert_lm.EmbeddingEngine(
+          model_path=self.model_path,
+          backend=litert_lm.Backend.CPU(),
+          vision_tokens_per_image=280,
+      )
 
   def test_closed_raises_runtime_error(self):
     engine = litert_lm.EmbeddingEngine(

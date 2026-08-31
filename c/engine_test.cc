@@ -30,6 +30,7 @@
 #include "c/conversation.h"
 #include "c/conversation_internal.h"
 #include "c/engine_internal.h"
+#include "c/experimental.h"
 #include "runtime/conversation/conversation.h"
 #include "runtime/conversation/io_types.h"
 #include "runtime/conversation/thinking_config.h"
@@ -183,6 +184,22 @@ TEST(EngineCTest, SetMaxNumImages) {
   litert_lm_engine_settings_set_max_num_images(settings.get(), 10);
   EXPECT_EQ(settings->settings->GetMainExecutorSettings().GetMaxNumImages(),
             10);
+}
+
+TEST(EngineCTest, SetMaxVisionTokensPerImage) {
+  const std::string task_path = "test_model_path_1";
+  EngineSettingsPtr settings(
+      litert_lm_engine_settings_create(task_path.c_str(), "cpu",
+                                       /* vision_backend_str */ nullptr,
+                                       /* audio_backend_str */ nullptr),
+      &litert_lm_engine_settings_delete);
+  ASSERT_NE(settings, nullptr);
+  EXPECT_FALSE(settings->settings->GetMaxVisionTokensPerImage().has_value());
+
+  litert_lm_engine_settings_set_max_vision_tokens_per_image(settings.get(),
+                                                            280);
+  EXPECT_TRUE(settings->settings->GetMaxVisionTokensPerImage().has_value());
+  EXPECT_EQ(settings->settings->GetMaxVisionTokensPerImage().value(), 280);
 }
 
 TEST(EngineCTest, SetPrefillChunkSize) {
@@ -456,6 +473,15 @@ TEST(EngineCTest, CreateConversationConfig) {
   nlohmann::ordered_json expected_messages =
       nlohmann::ordered_json::array({message});
   EXPECT_EQ(preface.messages, expected_messages);
+
+  litert_lm_engine_settings_set_gpu_enable_metal_residency_set(settings.get(),
+                                                               true);
+  EXPECT_EQ(litert_lm_experimental_engine_update_gpu_enable_metal_residency_set(
+                engine.get(), true),
+            0);
+  EXPECT_EQ(litert_lm_experimental_engine_update_gpu_enable_metal_residency_set(
+                engine.get(), false),
+            0);
 }
 
 TEST(EngineCTest, CreateConversationConfigWithNoSamplerParams) {

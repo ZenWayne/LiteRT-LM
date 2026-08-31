@@ -2,14 +2,14 @@
 
 workspace(name = "litert_lm")
 
-# UPDATED = 2026-08-07
-LITERT_REF = "b0f6c12088df229f6342f1af164caa66ffa7b010"
+# UPDATED = 2026-08-27
+LITERT_REF = "9fe5be45564c868408e6514c8aabb83e211a0911"
 
-LITERT_SHA256 = "8439f4f3ff7c06912ccc1b6e358f36e737f071d75b786c4562edceab04881096"
+LITERT_SHA256 = "5dbb113744e103f899c7b1b7c5479126b36a0b7414c3d971185c1f02041bfa39"
 
-TENSORFLOW_REF = "9445166b2bae51d8ade232232b3bcf73489d3a99"
+TENSORFLOW_REF = "d9a8da74b4c3de28a39ab34ad007838d6bc30c67"
 
-TENSORFLOW_SHA256 = "2c541cc6c7969f7750a0bc00bf7bd559cb724db88fe6e066a1e764db5ff9a85f"
+TENSORFLOW_SHA256 = "cd46b37c0f722d5a48c0accc9618cc5684c553332b913091023703461f318d9b"
 
 # buildifier: disable=load-on-top
 
@@ -397,8 +397,6 @@ http_archive(
     patch_cmds = [
         # Replace @//third_party with @litert//third_party in files under third_party/.
         "sed -i -e 's|\"@//third_party/|\"@litert//third_party/|g' third_party/*/*",
-        # Replace @stblib with @stb://stblib in support/*/BUILD files.
-        "sed -i -e 's|\"@stblib\"|\"@stb//:stblib\"|g' support/*/BUILD",
     ],
     sha256 = LITERT_SHA256,
     strip_prefix = "LiteRT-" + LITERT_REF,
@@ -481,6 +479,14 @@ http_archive(
     sha256 = "2fe28173428f8eebf2aa8a665bad32136086cc065f50c7154678a96250d1cde1",
     strip_prefix = "skia-226ae9d866748a2e68b6dbf114b37129c380a298/include/config",
     urls = ["https://github.com/google/skia/archive/226ae9d866748a2e68b6dbf114b37129c380a298.zip"],
+)
+
+http_archive(
+    name = "espeak_ng",
+    build_file = "@//:BUILD.espeak_ng",
+    sha256 = "bb4338102ff3b49a81423da8a1a158b420124b055b60fa76cfb4b18677130a23",
+    strip_prefix = "espeak-ng-1.52.0",
+    urls = ["https://github.com/espeak-ng/espeak-ng/archive/refs/tags/1.52.0.tar.gz"],
 )
 
 # Android rules. Need latest rules_android_ndk to use NDK 26+.

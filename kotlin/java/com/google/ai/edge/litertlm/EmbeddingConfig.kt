@@ -24,6 +24,8 @@ package com.google.ai.edge.litertlm
  * @property audioBackend The execution backend for the audio encoder (if model is multimodal).
  * @property cacheDir Directory for compiled model artifacts and caching.
  * @property modelFd File descriptor for the model bundle. Supported on Android.
+ * @property maxInputLength Maximum sequence length (in tokens) for text encoder signatures.
+ * @property visionTokensPerImage Desired number of vision tokens generated per image.
  */
 data class EmbeddingEngineConfig
 @JvmOverloads
@@ -34,6 +36,8 @@ constructor(
   val audioBackend: Backend? = null,
   val cacheDir: String? = null,
   val modelFd: Int? = null,
+  val maxInputLength: Int? = null,
+  val visionTokensPerImage: Int? = null,
 ) {
   init {
     val hasPath = !modelPath.isNullOrEmpty()
@@ -51,10 +55,19 @@ constructor(
  *   engine default.
  * @property insertSpecialTokens Whether to automatically insert special tokens (BOS, EOS, start/end
  *   of image, start/end of audio). If `null`, uses the C++ engine default.
+ * @property outputSize The output embedding size to truncate to. If `null`, uses the C++ engine
+ *   default.
+ * @property visionTokensPerImage The number of vision soft tokens to generate per image. If `null`,
+ *   uses the C++ engine default.
  */
 data class EmbeddingOptions
 @JvmOverloads
-constructor(val normalize: Boolean? = null, val insertSpecialTokens: Boolean? = null)
+constructor(
+  val normalize: Boolean? = null,
+  val insertSpecialTokens: Boolean? = null,
+  val outputSize: Int? = null,
+  val visionTokensPerImage: Int? = null,
+)
 
 /**
  * Represents the embedding result for an input item.

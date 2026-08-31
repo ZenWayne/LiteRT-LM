@@ -42,9 +42,54 @@
 #include "runtime/executor/llm_executor_io_types.h"
 #include "runtime/executor/llm_executor_processed_tokens.h"
 #include "runtime/executor/llm_executor_settings.h"
-#include "runtime/executor/llm_litert_npu_compiled_model_executor_utils.h"
+#include "runtime/executor/npu/llm_litert_npu_compiled_model_executor_utils.h"
+#include "runtime/executor/npu/llm_litert_npu_embedder.h"
+#include "runtime/executor/npu/llm_litert_npu_kv_cache.h"
+#include "runtime/executor/npu/llm_litert_npu_mask.h"
+#include "runtime/executor/npu/llm_litert_npu_rope.h"
 
 namespace litert::lm {
+
+// Holds the context for the drafter auxiliary model (MTP RoPE & Mask).
+struct DrafterAuxContext {
+  ::litert::CompiledModel mtp_aux_compiled_model;
+  NpuRope drafter_rope;
+  NpuMask drafter_mask;
+
+  DrafterAuxContext(::litert::CompiledModel mtp_aux_compiled_model,
+                    NpuRope drafter_rope, NpuMask drafter_mask)
+      : mtp_aux_compiled_model(std::move(mtp_aux_compiled_model)),
+        drafter_rope(std::move(drafter_rope)),
+        drafter_mask(std::move(drafter_mask)) {
+    this->drafter_rope.SetCompiledModel(&this->mtp_aux_compiled_model);
+    this->drafter_mask.SetCompiledModel(&this->mtp_aux_compiled_model);
+  }
+  DrafterAuxContext(DrafterAuxContext&& other) noexcept
+      : mtp_aux_compiled_model(std::move(other.mtp_aux_compiled_model)),
+        drafter_rope(std::move(other.drafter_rope)),
+        drafter_mask(std::move(other.drafter_mask)) {
+    drafter_rope.SetCompiledModel(&mtp_aux_compiled_model);
+    drafter_mask.SetCompiledModel(&mtp_aux_compiled_model);
+  }
+  DrafterAuxContext& operator=(DrafterAuxContext&& other) noexcept {
+    if (this != &other) {
+      mtp_aux_compiled_model = std::move(other.mtp_aux_compiled_model);
+      drafter_rope = std::move(other.drafter_rope);
+      drafter_mask = std::move(other.drafter_mask);
+      drafter_rope.SetCompiledModel(&mtp_aux_compiled_model);
+      drafter_mask.SetCompiledModel(&mtp_aux_compiled_model);
+    }
+    return *this;
+  }
+
+  // Compiles the MTP auxiliary model and initializes drafter_rope and
+  // drafter_mask.
+  static absl::StatusOr<DrafterAuxContext> Create(
+      ::litert::Environment& env, const litert::Model& mtp_aux_model,
+      const absl::flat_hash_map<absl::string_view, ::litert::TensorBuffer>&
+          drafter_aux_output_buffers,
+      MaskUpdateMethod mtp_mask_update_method);
+};
 
 // Component intended to be used with an NPU variant of Gemma3.
 class LlmLiteRtNpuCompiledModelExecutor : public LlmExecutor {
@@ -139,7 +184,8 @@ class LlmLiteRtNpuCompiledModelExecutor : public LlmExecutor {
       LlmExecutorSettings executor_settings, Environment& llm_env,
       NpuAuxiliaryContext npu_auxiliary_context,
       ::litert::CompiledModel text_decoder_compiled_model,
-      InferenceContext text_decoder_inference_context,
+      std::vector<ContextGroup> context_groups,
+      std::vector<int> sorted_supported_context_sizes,
       SortedPrefillSignatureMap prefill_signature_map,
       ResolvedPrefillSignatures prefill_signatures,
       LogitsQuantizationParams quantization_params, int64_t kv_cache_init_value,
@@ -156,8 +202,9 @@ class LlmLiteRtNpuCompiledModelExecutor : public LlmExecutor {
         main_cache_(std::move(main_cache)),
         npu_auxiliary_context_(std::move(npu_auxiliary_context)),
         text_decoder_compiled_model_(std::move(text_decoder_compiled_model)),
-        text_decoder_inference_context_(
-            std::move(text_decoder_inference_context)),
+        context_groups_(std::move(context_groups)),
+        sorted_supported_context_sizes_(
+            std::move(sorted_supported_context_sizes)),
         prefill_signature_map_(std::move(prefill_signature_map)),
         prefill_signatures_(std::move(prefill_signatures)),
         speculative_decoding_type_(speculative_decoding_type),
@@ -189,6 +236,17 @@ class LlmLiteRtNpuCompiledModelExecutor : public LlmExecutor {
   }
 
  private:
+  const ContextGroup& ActiveContextGroup() const {
+    return context_groups_[active_context_group_index_];
+  }
+  ContextGroup& ActiveContextGroup() {
+    return context_groups_[active_context_group_index_];
+  }
+  ContextGroup& MutableActiveContextGroup() {
+    return context_groups_[active_context_group_index_];
+  }
+  absl::Status SwitchContextSizeIfRequired(int required_tokens);
+
   // Prefill internal implementation, for one prefill call to the Interpreter
   // with a certain length.
   absl::Status PrefillInternal(absl::string_view prefill_signature,
@@ -204,7 +262,7 @@ class LlmLiteRtNpuCompiledModelExecutor : public LlmExecutor {
 
   // Runs the common downstream prefill pipeline (RoPE, Masking, LLM execution,
   // and KV Cache updates) using the pre-populated active buffers.
-  absl::Status PrefillCommonPipeline(absl::string_view prefill_signature);
+  absl::Status PrefillCommonPipeline(const ResolvedPrefillSignatures& sigs);
 
   // Decode internal implementation. Uses the specified 'token' as the input
   // token and uses the specified 'step' as the current time step.  The
@@ -283,6 +341,7 @@ class LlmLiteRtNpuCompiledModelExecutor : public LlmExecutor {
       ::litert::Environment& env,
       ::litert::CompiledModel& text_decoder_compiled_model,
       const ResolvedPrefillSignatures& prefill_signatures,
+      absl::string_view decode_signature, absl::string_view verify_signature,
       absl::flat_hash_map<absl::string_view, ::litert::TensorBuffer>&
           input_kv_cache_buffers,
       absl::flat_hash_map<absl::string_view, ::litert::TensorBuffer>&
@@ -300,9 +359,8 @@ class LlmLiteRtNpuCompiledModelExecutor : public LlmExecutor {
 
   static absl::Status WarmupInference(
       ::litert::CompiledModel& text_decoder_compiled_model,
-      InferenceContext& text_decoder_inference_context,
+      std::vector<ContextGroup>& context_groups,
       ::litert::CompiledModel& compiled_model_auxiliary,
-      const ResolvedPrefillSignatures& prefill_signatures,
       const InferenceContext& rope_inference_context,
       const InferenceContext& mask_inference_context,
       const InferenceContext& cache_update_inference_context);
@@ -334,6 +392,7 @@ class LlmLiteRtNpuCompiledModelExecutor : public LlmExecutor {
       litert::Environment& env, const litert::Model* text_decoder_model,
       CompiledModel& text_decoder_compiled_model,
       const ResolvedPrefillSignatures& prefill_signatures,
+      absl::string_view decode_signature, absl::string_view verify_signature,
       absl::flat_hash_map<absl::string_view, ::litert::TensorBuffer>&
           text_decoder_prefill_input_buffers,
       absl::flat_hash_map<absl::string_view, ::litert::TensorBuffer>&
@@ -362,7 +421,9 @@ class LlmLiteRtNpuCompiledModelExecutor : public LlmExecutor {
   LatencyStats latency_stats_;
   NpuAuxiliaryContext npu_auxiliary_context_;
   ::litert::CompiledModel text_decoder_compiled_model_;
-  InferenceContext text_decoder_inference_context_;
+  std::vector<ContextGroup> context_groups_;
+  std::vector<int> sorted_supported_context_sizes_;
+  int active_context_group_index_ = 0;
   SortedPrefillSignatureMap prefill_signature_map_;
   // The prefill-family signature names resolved for the prefill length the
   // model was compiled with.

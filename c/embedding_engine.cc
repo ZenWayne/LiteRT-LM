@@ -34,6 +34,7 @@
 #include "runtime/engine/embedding_engine.h"
 #include "runtime/engine/embedding_engine_settings.h"
 #include "runtime/engine/io_types.h"
+#include "runtime/executor/embedding_executor_base.h"
 #include "runtime/executor/executor_settings_base.h"
 #include "runtime/executor/litert_compiled_model_executor_utils.h"
 #include "support/preprocessor/audio_preprocessor.h"
@@ -213,6 +214,28 @@ void litert_lm_embedding_engine_settings_set_audio_litert_dispatch_lib_dir(
   }
 }
 
+void litert_lm_embedding_engine_settings_set_max_input_length(
+    LiteRtLmEmbeddingEngineSettings* settings, int max_input_length) {
+  if (settings && settings->settings) {
+    if (max_input_length > 0) {
+      settings->settings->SetMaxInputLength(max_input_length);
+    } else {
+      settings->settings->SetMaxInputLength(std::nullopt);
+    }
+  }
+}
+
+void litert_lm_embedding_engine_settings_set_vision_tokens_per_image(
+    LiteRtLmEmbeddingEngineSettings* settings, int vision_tokens_per_image) {
+  if (settings && settings->settings) {
+    if (vision_tokens_per_image > 0) {
+      settings->settings->SetVisionTokensPerImage(vision_tokens_per_image);
+    } else {
+      settings->settings->SetVisionTokensPerImage(std::nullopt);
+    }
+  }
+}
+
 LiteRtLmEmbeddingOptions* litert_lm_embedding_options_create(void) {
   return new LiteRtLmEmbeddingOptions{litert::lm::EmbeddingOptions{}};
 }
@@ -251,6 +274,61 @@ bool litert_lm_embedding_options_get_insert_special_tokens(
   return options->options.insert_special_tokens;
 }
 
+void litert_lm_embedding_options_set_input_overflow_strategy(
+    LiteRtLmEmbeddingOptions* options, LiteRtLmInputOverflowStrategy strategy) {
+  if (options) {
+    options->options.input_overflow_strategy =
+        static_cast<litert::lm::InputOverflowStrategy>(strategy);
+  }
+}
+
+LiteRtLmInputOverflowStrategy
+litert_lm_embedding_options_get_input_overflow_strategy(
+    const LiteRtLmEmbeddingOptions* options) {
+  if (!options) {
+    return kLiteRtLmInputOverflowStrategyError;
+  }
+  return static_cast<LiteRtLmInputOverflowStrategy>(
+      options->options.input_overflow_strategy);
+}
+
+void litert_lm_embedding_options_set_output_size(
+    LiteRtLmEmbeddingOptions* options, int output_size) {
+  if (options) {
+    if (output_size <= 0) {
+      options->options.output_size = std::nullopt;
+    } else {
+      options->options.output_size = output_size;
+    }
+  }
+}
+
+int litert_lm_embedding_options_get_output_size(
+    const LiteRtLmEmbeddingOptions* options) {
+  if (!options || !options->options.output_size.has_value()) {
+    return -1;
+  }
+  return *options->options.output_size;
+}
+
+void litert_lm_embedding_options_set_vision_tokens_per_image(
+    LiteRtLmEmbeddingOptions* options, int vision_tokens_per_image) {
+  if (options) {
+    if (vision_tokens_per_image > 0) {
+      options->options.vision_tokens_per_image = vision_tokens_per_image;
+    } else {
+      options->options.vision_tokens_per_image = std::nullopt;
+    }
+  }
+}
+
+int litert_lm_embedding_options_get_vision_tokens_per_image(
+    const LiteRtLmEmbeddingOptions* options) {
+  if (!options || !options->options.vision_tokens_per_image.has_value()) {
+    return 0;
+  }
+  return *options->options.vision_tokens_per_image;
+}
 void litert_lm_embedding_response_delete(LiteRtLmEmbeddingResponse* response) {
   delete response;
 }

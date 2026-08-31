@@ -25,6 +25,17 @@ func testDataPath(forResource resource: String) -> String {
 
 class EngineTests: XCTestCase {
 
+  override func setUp() {
+    super.setUp()
+    ExperimentalFlags.optIntoExperimentalAPIs()
+    ExperimentalFlags.gpuEnableMetalResidencySet = nil
+  }
+
+  override func tearDown() {
+    ExperimentalFlags.gpuEnableMetalResidencySet = nil
+    super.tearDown()
+  }
+
   func testEngineConfig_IsCorrectlySet() async throws {
     // swift-format-ignore
     let modelResource =
@@ -79,6 +90,45 @@ class EngineTests: XCTestCase {
     try await engine.initialize()
     let isInitialized = await engine.isInitialized()
     XCTAssertTrue(isInitialized)
+  }
+
+  func testInitialize_WithVisualTokenBudget_WithoutVisionBackend_Succeeds() async throws {
+    // swift-format-ignore
+    let modelResource =
+      "runtime/testdata/test_lm_new_metadata.task"
+    let modelPath = testDataPath(forResource: modelResource)
+    let engineConfig = try EngineConfig(
+      modelPath: modelPath,
+      maxNumTokens: 16,
+      cacheDir: NSTemporaryDirectory()
+    )
+    let engine = Engine(engineConfig: engineConfig)
+
+    ExperimentalFlags.optIntoExperimentalAPIs()
+    let originalBudget = ExperimentalFlags.visualTokenBudget
+    defer { ExperimentalFlags.visualTokenBudget = originalBudget }
+    ExperimentalFlags.visualTokenBudget = 280
+
+    try await engine.initialize()
+
+    let isInitialized = await engine.isInitialized()
+    XCTAssertTrue(isInitialized)
+  }
+
+  func testUpdateGPUEnableMetalResidencySetSucceeds() async throws {
+    ExperimentalFlags.gpuEnableMetalResidencySet = true
+
+    // swift-format-ignore
+    let modelResource =
+      "runtime/testdata/test_lm_new_metadata.task"
+    let modelPath = testDataPath(forResource: modelResource)
+    let engineConfig = try EngineConfig(
+      modelPath: modelPath, maxNumTokens: 16, cacheDir: NSTemporaryDirectory())
+    let engine = Engine(engineConfig: engineConfig)
+    try await engine.initialize()
+
+    try await engine.updateGPUEnableMetalResidencySet(false)
+    try await engine.updateGPUEnableMetalResidencySet(true)
   }
 
   func testInitialize_ThrowsIfCalledTwice() async throws {
@@ -173,7 +223,7 @@ class EngineTests: XCTestCase {
   func testEngineTeardownAndHandleNilDoesNotCrash() async throws {
     func scopeToTriggerEngineTeardown() async throws {
       let modelResource =
-        "runtime/testdata/test_lm_new_metadata.task"
+        + "runtime/testdata/test_lm_new_metadata.task"
       let modelPath = testDataPath(forResource: modelResource)
       let engineConfig = try EngineConfig(
         modelPath: modelPath, maxNumTokens: 16, cacheDir: NSTemporaryDirectory())

@@ -741,8 +741,8 @@ TEST(EmbeddingLiteRtCompiledModelExecutorTest,
     EXPECT_EQ(output.num_chunks, 1);
   }
 
-  // Case 3: Input size 48 -> default Chunk and Average across 2 chunks of size
-  // 24 (both using encoder_24).
+  // Case 3: Input size 48 with kChunkAndAverage strategy -> Chunk and Average
+  // across 2 chunks of size 24 (both using encoder_24).
   {
     alignas(LITERT_HOST_MEMORY_BUFFER_ALIGNMENT) int32_t token_data[48];
     std::fill_n(token_data, 48, 42);
@@ -755,8 +755,11 @@ TEST(EmbeddingLiteRtCompiledModelExecutorTest,
     ExecutorInputs inputs(ExecutorTextData(std::move(token_ids_buffer)),
                           std::nullopt, std::nullopt);
 
+    ComputeEmbeddingOptions options{
+        .input_overflow_strategy = InputOverflowStrategy::kChunkAndAverage,
+    };
     ASSERT_OK_AND_ASSIGN(auto output,
-                         embedding_executor->ComputeEmbedding(inputs));
+                         embedding_executor->ComputeEmbedding(inputs, options));
     EXPECT_EQ(output.embedding.size(), 24 * 8);
     EXPECT_EQ(output.input_length, 48);
     EXPECT_EQ(output.truncated_length, std::nullopt);
@@ -788,7 +791,8 @@ TEST(EmbeddingLiteRtCompiledModelExecutorTest,
     EXPECT_EQ(output.num_chunks, 1);
   }
 
-  // Case 5: Input size 48 with kError strategy -> returns InvalidArgumentError.
+  // Case 5: Input size 48 with default kError strategy -> returns
+  // InvalidArgumentError.
   {
     alignas(LITERT_HOST_MEMORY_BUFFER_ALIGNMENT) int32_t token_data[48];
     std::fill_n(token_data, 48, 42);
@@ -801,10 +805,7 @@ TEST(EmbeddingLiteRtCompiledModelExecutorTest,
     ExecutorInputs inputs(ExecutorTextData(std::move(token_ids_buffer)),
                           std::nullopt, std::nullopt);
 
-    ComputeEmbeddingOptions options{
-        .input_overflow_strategy = InputOverflowStrategy::kError,
-    };
-    auto result = embedding_executor->ComputeEmbedding(inputs, options);
+    auto result = embedding_executor->ComputeEmbedding(inputs);
     EXPECT_THAT(
         result,
         StatusIs(absl::StatusCode::kInvalidArgument,

@@ -85,6 +85,16 @@ public actor EmbeddingEngine {
       litert_lm_embedding_engine_settings_set_cache_dir(settings, cacheDir)
     }
 
+    if let maxInputLength = config.maxInputLength {
+      litert_lm_embedding_engine_settings_set_max_input_length(
+        settings, Int32(maxInputLength))
+    }
+
+    if let visionTokensPerImage = config.visionTokensPerImage {
+      litert_lm_embedding_engine_settings_set_vision_tokens_per_image(
+        settings, Int32(visionTokensPerImage))
+    }
+
     guard let engineHandle = litert_lm_embedding_engine_create(settings) else {
       throw LiteRTLMError.embeddingEngine(.failedToCreateEngine)
     }
@@ -133,6 +143,16 @@ public actor EmbeddingEngine {
     if let insertSpecialTokens = options.insertSpecialTokens {
       litert_lm_embedding_options_set_insert_special_tokens(
         optionsHandle, insertSpecialTokens
+      )
+    }
+    if let outputSize = options.outputSize {
+      litert_lm_embedding_options_set_output_size(
+        optionsHandle, Int32(outputSize)
+      )
+    }
+    if let visionTokensPerImage = options.visionTokensPerImage {
+      litert_lm_embedding_options_set_vision_tokens_per_image(
+        optionsHandle, Int32(visionTokensPerImage)
       )
     }
 
@@ -217,6 +237,16 @@ public actor EmbeddingEngine {
     if let insertSpecialTokens = options.insertSpecialTokens {
       litert_lm_embedding_options_set_insert_special_tokens(
         optionsHandle, insertSpecialTokens
+      )
+    }
+    if let outputSize = options.outputSize {
+      litert_lm_embedding_options_set_output_size(
+        optionsHandle, Int32(outputSize)
+      )
+    }
+    if let visionTokensPerImage = options.visionTokensPerImage {
+      litert_lm_embedding_options_set_vision_tokens_per_image(
+        optionsHandle, Int32(visionTokensPerImage)
       )
     }
 

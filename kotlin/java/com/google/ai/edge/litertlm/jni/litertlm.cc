@@ -520,7 +520,8 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateEngine)(
     jint max_num_images, jstring cache_dir, jboolean enable_benchmark,
     jobject enable_speculative_decoding, jstring main_npu_native_library_dir,
     jstring vision_npu_native_library_dir, jstring audio_npu_native_library_dir,
-    jint main_backend_num_threads, jint audio_backend_num_threads) {
+    jint main_backend_num_threads, jint audio_backend_num_threads,
+    jint max_vision_tokens_per_image) {
   const char* model_path_chars = env->GetStringUTFChars(model_path, nullptr);
   std::string model_path_str(model_path_chars);
   env->ReleaseStringUTFChars(model_path, model_path_chars);
@@ -678,6 +679,10 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateEngine)(
     advanced_settings.enable_speculative_decoding = (is_enabled == JNI_TRUE);
     settings->GetMutableMainExecutorSettings().SetAdvancedSettings(
         advanced_settings);
+  }
+
+  if (max_vision_tokens_per_image > 0) {
+    settings->SetMaxVisionTokensPerImage(max_vision_tokens_per_image);
   }
 
   auto engine = EngineFactory::CreateDefault(*settings);
@@ -1524,10 +1529,64 @@ LITERTLM_JNIEXPORT void JNICALL JNI_METHOD(nativeDeleteCapabilities)(
       reinterpret_cast<LiteRtLmLoadedFile*>(capabilities_pointer));
 }
 
+// JNI bridge method to check speculative decoding support.
 LITERTLM_JNIEXPORT jboolean JNICALL
 JNI_METHOD(nativeHasSpeculativeDecodingSupport)(JNIEnv* env, jclass thiz,
                                                 jlong capabilities_pointer) {
   return litert_lm_loaded_file_has_speculative_decoding_support(
+      reinterpret_cast<LiteRtLmLoadedFile*>(capabilities_pointer));
+}
+
+// JNI bridge method to check thinking/reasoning budget support.
+LITERTLM_JNIEXPORT jboolean JNICALL JNI_METHOD(nativeSupportsThinking)(
+    JNIEnv* env, jclass thiz, jlong capabilities_pointer) {
+  return litert_lm_loaded_file_supports_thinking(
+      reinterpret_cast<LiteRtLmLoadedFile*>(capabilities_pointer));
+}
+
+// JNI bridge method to check function calling/tool use support.
+LITERTLM_JNIEXPORT jboolean JNICALL
+JNI_METHOD(nativeSupportsFunctionCalling)(
+    JNIEnv* env, jclass thiz, jlong capabilities_pointer) {
+  return litert_lm_loaded_file_supports_function_calling(
+      reinterpret_cast<LiteRtLmLoadedFile*>(capabilities_pointer));
+}
+
+LITERTLM_JNIEXPORT jint JNICALL JNI_METHOD(nativeSamplerType)(
+    JNIEnv* env, jclass thiz, jlong capabilities_pointer) {
+  return litert_lm_loaded_file_sampler_type(
+      reinterpret_cast<LiteRtLmLoadedFile*>(capabilities_pointer));
+}
+
+LITERTLM_JNIEXPORT jfloat JNICALL JNI_METHOD(nativeSamplerTemp)(
+    JNIEnv* env, jclass thiz, jlong capabilities_pointer) {
+  return litert_lm_loaded_file_sampler_temperature(
+      reinterpret_cast<LiteRtLmLoadedFile*>(capabilities_pointer));
+}
+
+LITERTLM_JNIEXPORT jint JNICALL JNI_METHOD(nativeSamplerTopK)(
+    JNIEnv* env, jclass thiz, jlong capabilities_pointer) {
+  return litert_lm_loaded_file_sampler_top_k(
+      reinterpret_cast<LiteRtLmLoadedFile*>(capabilities_pointer));
+}
+
+LITERTLM_JNIEXPORT jfloat JNICALL JNI_METHOD(nativeSamplerTopP)(
+    JNIEnv* env, jclass thiz, jlong capabilities_pointer) {
+  return litert_lm_loaded_file_sampler_top_p(
+      reinterpret_cast<LiteRtLmLoadedFile*>(capabilities_pointer));
+}
+// JNI bridge method to check if the model supports the requested input
+// modality.
+LITERTLM_JNIEXPORT jboolean JNICALL JNI_METHOD(nativeSupportsInputModality)(
+    JNIEnv* env, jclass thiz, jlong capabilities_pointer, jint modality) {
+  return litert_lm_loaded_file_supports_input_modality(
+      reinterpret_cast<LiteRtLmLoadedFile*>(capabilities_pointer),
+      static_cast<LiteRtLmModality>(modality));
+}
+
+LITERTLM_JNIEXPORT jint JNICALL JNI_METHOD(nativeMaxVisionTokenBudget)(
+    JNIEnv* env, jclass thiz, jlong capabilities_pointer) {
+  return litert_lm_loaded_file_max_vision_token_budget(
       reinterpret_cast<LiteRtLmLoadedFile*>(capabilities_pointer));
 }
 
@@ -1536,11 +1595,17 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateEmbeddingEngine)(
     jstring backend, jstring vision_backend, jstring audio_backend,
     jstring cache_dir, jstring main_npu_native_library_dir,
     jstring vision_npu_native_library_dir, jstring audio_npu_native_library_dir,
-    jint main_backend_num_threads, jint audio_backend_num_threads) {
+    jint main_backend_num_threads, jint audio_backend_num_threads,
+    jint max_input_length, jint vision_tokens_per_image) {
   ::litert::ScopedFile scoped_file;
   absl::StatusOr<litert::lm::ModelAssets> model_assets;
 
   if (model_fd >= 0) {
+#if defined(_WIN32)
+    ThrowLiteRtLmJniException(
+        env, "Model file descriptor is not supported on Windows.");
+    return 0;
+#else
     auto owned_fd = dup(model_fd);
     if (owned_fd < 0) {
       ThrowLiteRtLmJniException(
@@ -1559,6 +1624,7 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateEmbeddingEngine)(
     auto shared_scoped_file =
         std::make_shared<::litert::ScopedFile>(std::move(*dup_status));
     model_assets = litert::lm::ModelAssets::Create(shared_scoped_file);
+#endif
   } else {
     std::string model_path_str;
     if (model_path != nullptr) {
@@ -1726,6 +1792,13 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateEmbeddingEngine)(
         audio_backend_num_threads);
   }
 
+  if (max_input_length > 0) {
+    settings->SetMaxInputLength(max_input_length);
+  }
+  if (vision_tokens_per_image > 0) {
+    settings->SetVisionTokensPerImage(vision_tokens_per_image);
+  }
+
   auto engine = litert::lm::EmbeddingEngineImpl::Create(
       std::move(*resources), std::move(owned_env), std::move(*tokenizer),
       std::move(*settings));
@@ -1748,7 +1821,8 @@ LITERTLM_JNIEXPORT void JNICALL JNI_METHOD(nativeDeleteEmbeddingEngine)(
 
 LITERTLM_JNIEXPORT jobject JNICALL JNI_METHOD(nativeComputeEmbedding)(
     JNIEnv* env, jclass thiz, jlong embedding_engine_pointer,
-    jobjectArray input_data, jobject normalize, jobject insert_special_tokens) {
+    jobjectArray input_data, jobject normalize, jobject insert_special_tokens,
+    jobject output_size, jobject vision_tokens_per_image) {
   auto* engine =
       reinterpret_cast<litert::lm::EmbeddingEngine*>(embedding_engine_pointer);
   if (!engine) {
@@ -1770,6 +1844,13 @@ LITERTLM_JNIEXPORT jobject JNICALL JNI_METHOD(nativeComputeEmbedding)(
   if (auto opt_tokens = GetOptionalBoolean(env, insert_special_tokens);
       opt_tokens.has_value()) {
     options.insert_special_tokens = *opt_tokens;
+  }
+  if (auto opt_size = GetOptionalInt(env, output_size); opt_size.has_value()) {
+    options.output_size = *opt_size;
+  }
+  if (auto opt_vision_tokens = GetOptionalInt(env, vision_tokens_per_image);
+      opt_vision_tokens.has_value()) {
+    options.vision_tokens_per_image = *opt_vision_tokens;
   }
 
   auto response = engine->ComputeEmbedding(contents, options);
@@ -1799,7 +1880,8 @@ LITERTLM_JNIEXPORT jobject JNICALL JNI_METHOD(nativeComputeEmbedding)(
 LITERTLM_JNIEXPORT jobjectArray JNICALL JNI_METHOD(nativeComputeEmbeddingBatch)(
     JNIEnv* env, jclass thiz, jlong embedding_engine_pointer,
     jobjectArray input_data_batch, jobject normalize,
-    jobject insert_special_tokens) {
+    jobject insert_special_tokens, jobject output_size,
+    jobject vision_tokens_per_image) {
   auto* engine =
       reinterpret_cast<litert::lm::EmbeddingEngine*>(embedding_engine_pointer);
   if (!engine) {
@@ -1829,6 +1911,13 @@ LITERTLM_JNIEXPORT jobjectArray JNICALL JNI_METHOD(nativeComputeEmbeddingBatch)(
   if (auto opt_tokens = GetOptionalBoolean(env, insert_special_tokens);
       opt_tokens.has_value()) {
     options.insert_special_tokens = *opt_tokens;
+  }
+  if (auto opt_size = GetOptionalInt(env, output_size); opt_size.has_value()) {
+    options.output_size = *opt_size;
+  }
+  if (auto opt_vision_tokens = GetOptionalInt(env, vision_tokens_per_image);
+      opt_vision_tokens.has_value()) {
+    options.vision_tokens_per_image = *opt_vision_tokens;
   }
 
   auto batch_response = engine->ComputeEmbeddingBatch(contents_batch, options);

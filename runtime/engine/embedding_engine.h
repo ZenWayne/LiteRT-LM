@@ -22,6 +22,7 @@
 #include "absl/types/optional.h"  // from @com_google_absl
 #include "runtime/engine/io_types.h"
 #include "runtime/executor/embedding_executor_base.h"
+#include "runtime/executor/model_signature_utils.h"
 #include "runtime/proto/embedding_metadata.pb.h"
 
 namespace litert::lm {
@@ -37,8 +38,16 @@ struct EmbeddingOptions {
 
   // Strategy for handling inputs longer than the maximum supported signature
   // length.
-  InputOverflowStrategy input_overflow_strategy =
-      InputOverflowStrategy::kChunkAndAverage;
+  InputOverflowStrategy input_overflow_strategy = InputOverflowStrategy::kError;
+  // The number of vision soft tokens to generate per image. If set, overrides
+  // the default max_num_patches parameter for image preprocessing during this
+  // computation.
+  std::optional<int> vision_tokens_per_image = std::nullopt;
+
+  // The output embedding size to truncate the embedding to. If not set, uses
+  // the default output embedding size. Must be non-negative and not exceed the
+  // default output embedding size.
+  std::optional<int> output_size = std::nullopt;
 };
 
 // Represents the result of an embedding computation.
@@ -87,6 +96,16 @@ class EmbeddingEngine {
   // Returns the embedding metadata of the engine.
   virtual const std::optional<proto::EmbeddingMetadata>& GetEmbeddingMetadata()
       const = 0;
+
+  // Returns the selected text encoder signatures info if auto-selection was
+  // performed during engine creation, or nullopt otherwise.
+  virtual const std::optional<SelectedTextSignaturesInfo>&
+  GetSelectedTextSignaturesInfo() const = 0;
+
+  // Returns the selected vision signature info if auto-selection was performed
+  // during engine creation, or nullopt otherwise.
+  virtual const std::optional<SelectedVisionSignatureInfo>&
+  GetSelectedVisionSignatureInfo() const = 0;
 };
 
 }  // namespace litert::lm

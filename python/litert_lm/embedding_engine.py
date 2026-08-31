@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ctypes
 import dataclasses
+import enum
 from typing import Any, Sequence
 
 from . import interfaces
@@ -30,6 +31,18 @@ from ._messages import ImageFile
 from ._messages import Text
 
 
+@enum.unique
+class InputOverflowStrategy(enum.IntEnum):
+  """Strategy for handling inputs longer than maximum supported length."""
+
+  # Chunk the input to the maximum supported length and average the embeddings.
+  CHUNK_AND_AVERAGE = 0
+  # Truncate the input to the maximum supported length.
+  TRUNCATE = 1
+  # Return an error if the input is longer than the maximum supported length.
+  ERROR = 2
+
+
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class EmbeddingOptions:
   """Options for embedding generation.
@@ -40,10 +53,19 @@ class EmbeddingOptions:
     insert_special_tokens: Whether to automatically insert special tokens (BOS,
       EOS, start/end of image, start/end of audio). If None, uses the C++ engine
       default.
+    input_overflow_strategy: Strategy for handling inputs longer than the
+      maximum supported signature length. If None, uses the C++ engine default.
+    output_size: The output embedding size to truncate the embedding to. If
+      None, uses the C++ engine default.
+    vision_tokens_per_image: The number of vision soft tokens to generate per
+      image. If None, uses the C++ engine default.
   """
 
   normalize: bool | None = None
   insert_special_tokens: bool | None = None
+  input_overflow_strategy: InputOverflowStrategy | None = None
+  output_size: int | None = None
+  vision_tokens_per_image: int | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -115,6 +137,8 @@ class EmbeddingEngine:
       vision_backend: interfaces.Backend | None = None,
       audio_backend: interfaces.Backend | None = None,
       cache_dir: str | None = None,
+      max_input_length: int | None = None,
+      vision_tokens_per_image: int | None = None,
       **kwargs: Any,
   ):
     del kwargs
@@ -123,6 +147,8 @@ class EmbeddingEngine:
     self._vision_backend = vision_backend
     self._audio_backend = audio_backend
     self._cache_dir = cache_dir
+    self._max_input_length = max_input_length
+    self._vision_tokens_per_image = vision_tokens_per_image
 
     self._lib = _get_lib()
     self._engine_ptr: ctypes.c_void_p | None = None
@@ -161,6 +187,14 @@ class EmbeddingEngine:
           self._lib.litert_lm_embedding_engine_settings_set_audio_litert_dispatch_lib_dir(
               settings, self._audio_backend.litert_dispatch_lib_dir
           )
+      if self._max_input_length is not None:
+        self._lib.litert_lm_embedding_engine_settings_set_max_input_length(
+            settings, self._max_input_length
+        )
+      if self._vision_tokens_per_image is not None:
+        self._lib.litert_lm_embedding_engine_settings_set_vision_tokens_per_image(
+            settings, self._vision_tokens_per_image
+        )
 
       self._engine_ptr = self._lib.litert_lm_embedding_engine_create(settings)
       if not self._engine_ptr:
@@ -187,6 +221,16 @@ class EmbeddingEngine:
   @property
   def cache_dir(self) -> str | None:
     return self._cache_dir
+
+  @property
+  def max_input_length(self) -> int | None:
+    """Returns the maximum input sequence length in tokens, or None if unset."""
+    return self._max_input_length
+
+  @property
+  def vision_tokens_per_image(self) -> int | None:
+    """Returns the desired number of vision tokens per image, or None if unset."""
+    return self._vision_tokens_per_image
 
   def _check_alive(self) -> None:
     if self._engine_ptr is None:
@@ -222,6 +266,18 @@ class EmbeddingEngine:
       if options.insert_special_tokens is not None:
         self._lib.litert_lm_embedding_options_set_insert_special_tokens(
             options_ptr, options.insert_special_tokens
+        )
+      if options.input_overflow_strategy is not None:
+        self._lib.litert_lm_embedding_options_set_input_overflow_strategy(
+            options_ptr, int(options.input_overflow_strategy)
+        )
+      if options.output_size is not None:
+        self._lib.litert_lm_embedding_options_set_output_size(
+            options_ptr, options.output_size
+        )
+      if options.vision_tokens_per_image is not None:
+        self._lib.litert_lm_embedding_options_set_vision_tokens_per_image(
+            options_ptr, options.vision_tokens_per_image
         )
 
       created_ptrs = [_create_c_input_data(self._lib, item) for item in items]
@@ -283,6 +339,18 @@ class EmbeddingEngine:
       if options.insert_special_tokens is not None:
         self._lib.litert_lm_embedding_options_set_insert_special_tokens(
             options_ptr, options.insert_special_tokens
+        )
+      if options.input_overflow_strategy is not None:
+        self._lib.litert_lm_embedding_options_set_input_overflow_strategy(
+            options_ptr, int(options.input_overflow_strategy)
+        )
+      if options.output_size is not None:
+        self._lib.litert_lm_embedding_options_set_output_size(
+            options_ptr, options.output_size
+        )
+      if options.vision_tokens_per_image is not None:
+        self._lib.litert_lm_embedding_options_set_vision_tokens_per_image(
+            options_ptr, options.vision_tokens_per_image
         )
 
       batch_inputs_arrays: list[Any] = []
