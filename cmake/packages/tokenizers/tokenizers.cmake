@@ -62,6 +62,15 @@ if(TRUE)
       "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS} -include cstdint"
       -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
       -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+      # [LiteRTLM] tokenizers-cpp builds its Rust `tokenizers` crate (onig_sys
+      # etc.) via cargo with cc-rs, whose per-target toolchain vars are
+      # ${ANDROID_TOOLCHAIN_ROOT}/bin/aarch64-linux-android${API}-clang. The
+      # API-less symlink does not exist in NDK r28b (only NN-suffixed clang),
+      # and ANDROID_NATIVE_API_LEVEL is set by neither the NDK toolchain nor
+      # CMake's Android modules - it must be provided explicitly or cc-rs
+      # fails with "failed to find tool /bin/aarch64-linux-android-clang".
+      "-DANDROID_TOOLCHAIN_ROOT=${ANDROID_TOOLCHAIN_ROOT}"
+      "-DANDROID_NATIVE_API_LEVEL=${CMAKE_SYSTEM_VERSION}"
       # "-DCMAKE_PREFIX_PATH=${LITERTLM_ABSL_INSTALL_PREFIX};${LITERTLM_PROTOBUF_INSTALL_PREFIX};${LITERTLM_SENTENCEPIECE_INSTALL_PREFIX}"
   )
 
