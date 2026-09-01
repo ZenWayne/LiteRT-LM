@@ -94,6 +94,12 @@ if(NOT EXISTS "${LITERTLM_LITERTLM_TFLITE_STATIC_LIB}")
             "-DTFLITE_ENABLE_INSTALL=OFF"
             "-DTFLITE_ENABLE_XNNPACK=ON"
             "-DTFLITE_ENABLE_RESOURCE_VARIABLE=OFF"
+            # [LiteRTLM] The lite CMakeLists only FetchContent-clones the full
+            # tensorflow/tensorflow repo when TENSORFLOW_SOURCE_DIR is unset
+            # (the dir is also what the fork's tflite_patcher patches). Point
+            # at the already-cloned tree - cloning TF from github is slow and
+            # flaky (interrupted pack transfers) even through the proxy.
+            "-DTENSORFLOW_SOURCE_DIR=${LITERTLM_TENSORFLOW_SRC_DIR}"
             "-DXNNPACK_SET_VERBOSITY=OFF"
             "-DTFLITE_ENABLE_GPU=OFF"
             "-DTFLITE_HOST_TOOLS_DIR=${FLATBUFFERS_BIN_DIR}"
