@@ -66,7 +66,6 @@ if(NOT EXISTS "${LITERTLM_PROTOBUF_CONFIG_CMAKE_FILE}")
       "-Dprotobuf_BUILD_TESTS=OFF"
       "-Dprotobuf_BUILD_LIBPROTOC=ON"
       "-Dprotobuf_BUILD_PROTOC_BINARIES=OFF"
-      "-Dprotobuf_BUILD_LIBUPB=OFF"
       "-Dprotobuf_LOCAL_DEPENDENCIES_ONLY=ON"
       "-Dabsl_DIR=${LITERTLM_ABSL_INSTALL_PREFIX}/lib/cmake/absl"
       "-DGTest_DIR=${LITERTLM_GTEST_INSTALL_PREFIX}/lib/cmake/GTest"

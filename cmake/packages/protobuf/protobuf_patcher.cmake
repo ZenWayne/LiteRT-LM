@@ -89,3 +89,19 @@ patch_file_content("${UTF8_RANGE_LIST}"
     FALSE
 )
 
+
+# [LiteRTLM] The protoc-gen-upb* generator binaries cannot link under this
+# build's absl shim (absl::hash symbols missing in the injected link set -
+# see handoff doc P8), and nothing consumes the upb generators. Drop them
+# from the build (they come in via upb_generators.cmake) and from the
+# install rules, keeping libupb + the bootstrap (libprotoc needs them).
+patch_file_content("${ROOT_LIST}"
+    "include\(\$\{protobuf_SOURCE_DIR}/cmake/upb_generators.cmake\)"
+    "#include(${protobuf_SOURCE_DIR}/cmake/upb_generators.cmake)"
+    FALSE
+)
+patch_file_content("${LITERTLM_PROTOBUF_SRC_DIR}/cmake/install.cmake"
+    "if \(protobuf_BUILD_LIBUPB\)"
+    "if (FALSE)  # [LiteRTLM] upb generators not built"
+    FALSE
+)
