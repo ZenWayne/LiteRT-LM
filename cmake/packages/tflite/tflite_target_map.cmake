@@ -74,7 +74,11 @@ set(LITERTLM_TFLITE_TARGET_MAP
 
 if(LITERTLM_TOOLCHAIN_ARGS)
     message(STATUS "[LiteRTLM] Cross-compilation detected: Appending ARM64 targets.")
-    list(APPEND TFLITE_TARGET_MAP "kleidiai=${LITERTLM_TFLITE_LIB_DIR}/libkleidiai.a")
+    # NOTE: append to LITERTLM_TFLITE_TARGET_MAP (the map consumed by the
+    # aggregate). TFLITE_TARGET_MAP is a different (unused) variable - the
+    # previous append there silently dropped kleidiai from the link payload,
+    # and the arm64 XNNPACK references KleidiAI (SME) symbols through it.
+    list(APPEND LITERTLM_TFLITE_TARGET_MAP "kleidiai=${LITERTLM_TFLITE_LIB_DIR}/libkleidiai.a")
 endif()
 
 
