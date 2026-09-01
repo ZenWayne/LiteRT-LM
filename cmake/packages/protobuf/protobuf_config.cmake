@@ -33,9 +33,14 @@ set(protobuf_generate_PROTOC_EXE "${LITERTLM_PROTOBUF_BIN_DIR}/protoc" CACHE PAT
 
 if("${LITERTLM_ORCHESTRATION_PHASE}" STREQUAL "litert_lm")
     message(STATUS "[LiteRTLM] Protobuf: Using host protoc at ${LITERTLM_HOST_PROTOC}")
-    set(LITERTLM_PROTOBUF_BIN_DIR "${LITERTLM_HOST_PROTOC_BIN_DIR}" CACHE PATH "Host Protobuf binary path")
-    set(LITERTLM_PROTOC_EXECUTABLE "${LITERTLM_HOST_PROTOC}" CACHE PATH "Host protoc")
-    set(protobuf_generate_PROTOC_EXE "${LITERTLM_HOST_PROTOC}" CACHE PATH "Host protoc for generator module")
+    # FORCE is required: the plain CACHE sets above already created these
+    # entries on a fresh configure, and the no-FORCE override below would
+    # silently keep the cross (arm) install paths. The arm bin dir has no
+    # protoc (PROTOC_BINARIES=OFF in cross builds), and sentencepiece/tflite
+    # generation rules would depend on a non-existent arm protoc (P5).
+    set(LITERTLM_PROTOBUF_BIN_DIR "${LITERTLM_HOST_PROTOC_BIN_DIR}" CACHE PATH "Host Protobuf binary path" FORCE)
+    set(LITERTLM_PROTOC_EXECUTABLE "${LITERTLM_HOST_PROTOC}" CACHE PATH "Host protoc" FORCE)
+    set(protobuf_generate_PROTOC_EXE "${LITERTLM_HOST_PROTOC}" CACHE PATH "Host protoc for generator module" FORCE)
 endif()
 set(LITERTLM_PROTOBUF_PACKAGE_DIR
     "${LITERTLM_CMAKE_PACKAGES_DIR}/protobuf"
