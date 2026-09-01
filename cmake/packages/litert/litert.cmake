@@ -163,8 +163,10 @@ if(NOT EXISTS "${LITERTLM_LITERT_EXTERNAL_DONE}")
         # host_flatc_build/ when TFLITE_HOST_TOOLS_DIR is unset
         # (CMAKE_CROSSCOMPILING); the fork stubs that sub-project to suppress
         # external fetches, so 'flatc' target does not exist there and the
-        # build fails. The prebuilt host flatc already exists - pass its dir.
-        -DTFLITE_HOST_TOOLS_DIR=${LITERTLM_FLATBUFFERS_BIN_DIR}
+        # build fails. The prebuilt host flatc already exists - use the host
+        # flatc dir (LITERTLM_FLATBUFFERS_BIN_DIR is the cross install prefix,
+        # which has no flatc).
+        -DTFLITE_HOST_TOOLS_DIR=${LITERTLM_HOST_FLATC_BIN_DIR}
         -Dflatbuffers_DIR=${LITERTLM_FLATBUFFERS_INSTALL_PREFIX}/lib/cmake/flatbuffers
         -DFETCHCONTENT_SOURCE_DIR_FLATBUFFERS=${LITERTLM_FLATBUFFERS_SRC_DIR}/flatbuffers_external
         -DFLATBUFFERS_INSTALL_PREFIX=${LITERTLM_FLATBUFFERS_INSTALL_PREFIX}
