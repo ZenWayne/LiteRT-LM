@@ -65,6 +65,14 @@ if(NOT EXISTS "${LITERTLM_PROTOBUF_CONFIG_CMAKE_FILE}")
       "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
       "-Dprotobuf_BUILD_TESTS=OFF"
       "-Dprotobuf_BUILD_LIBPROTOC=ON"
+      # [LiteRTLM] Do NOT build protoc in this cross build: it is a host-only
+      # codegen tool (unusable as an arm64 artifact) and anything referencing
+      # the arm protoc is wrong. PROTOBUF_BINARIES must remain ON - upstream
+      # gates ALL libraries (utf8_range/libprotobuf-*/libprotoc/libupb) behind
+      # it and sets protobuf_INSTALL OFF when it is OFF. PROTOC_BINARIES only
+      # gates the protoc executable (+ its install/export rules in
+      # install.cmake); libprotoc stays via protobuf_BUILD_LIBPROTOC=ON.
+      "-Dprotobuf_BUILD_PROTOC_BINARIES=OFF"
       "-Dprotobuf_BUILD_PROTOBUF_BINARIES=ON"
       "-Dprotobuf_LOCAL_DEPENDENCIES_ONLY=ON"
       "-Dabsl_DIR=${LITERTLM_ABSL_INSTALL_PREFIX}/lib/cmake/absl"

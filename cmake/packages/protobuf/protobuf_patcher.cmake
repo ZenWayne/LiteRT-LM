@@ -88,3 +88,20 @@ patch_file_content("${UTF8_RANGE_LIST}"
     include(${LITERTLM_ABSL_AGGREGATE_PATH})\n"
     FALSE
 )
+
+# [LiteRTLM] P8 (see docs/arm64-90f42140-rebuild-handoff.md): the
+# protoc-gen-upb* executables fail to link in this cross build (the fork's
+# absl delivery does not reach their link line - broad absl:: undefined
+# symbols) and they are host-only codegen tools: unusable as arm64
+# artifacts and nothing in the build consumes them (sentencepiece/tflite
+# generate with the host protoc). Drop the generator targets by commenting
+# out their include. libupb itself stays (libprotoc requires it) and
+# install.cmake is left untouched: the generator install/export rules live
+# under if(protobuf_BUILD_PROTOC_BINARIES), which is OFF via protobuf.cmake,
+# so no dangling install/export targets are generated while the library
+# list (incl. libupb) stays intact.
+patch_file_content("${ROOT_LIST}"
+    "include\(\$\{protobuf_SOURCE_DIR}/cmake/upb_generators.cmake\)"
+    "#include(${protobuf_SOURCE_DIR}/cmake/upb_generators.cmake)"
+    False
+)
