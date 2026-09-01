@@ -101,7 +101,15 @@ if(NOT EXISTS "${LITERTLM_LITERTLM_TFLITE_STATIC_LIB}")
             # flaky (interrupted pack transfers) even through the proxy.
             "-DTENSORFLOW_SOURCE_DIR=${LITERTLM_TENSORFLOW_SRC_DIR}"
             "-DXNNPACK_SET_VERBOSITY=OFF"
-            "-DTFLITE_ENABLE_GPU=OFF"
+            # [LiteRTLM] MUST be ON: the litert C API builds
+            # litert_tflite_gpu_gl_core for Android unconditionally (upstream
+            # litert/c/CMakeLists.txt 'Provide missing TensorFlow Lite GPU GL
+            # core objects for Android builds'), and its objects reference
+            # tflite::gpu symbols (SizeOf, GpuInfo::IsPowerVR, ...) that only
+            # exist in libtensorflow-lite.a when the GPU sources are compiled.
+            # With GPU=OFF the final libLiteRt.so link fails with undefined
+            # tflite::gpu::* symbols.
+            "-DTFLITE_ENABLE_GPU=ON"
             "-DTFLITE_HOST_TOOLS_DIR=${FLATBUFFERS_BIN_DIR}"
             "-DTFLITE_PACKAGE_DIR=${LITERTLM_TFLITE_PACKAGE_DIR}"
             "-DLITERTLM_PROJECT_ROOT=${LITERTLM_PROJECT_ROOT}"
