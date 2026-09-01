@@ -159,6 +159,12 @@ if(NOT EXISTS "${LITERTLM_LITERT_EXTERNAL_DONE}")
         -DFLATC_PATHS=${LITERTLM_FLATBUFFERS_BIN_DIR}
         -DFLATBUFFERS_FLATC_EXECUTABLE=${LITERTLM_FLATC_EXECUTABLE}
         -DFLATC_EXECUTABLE=${LITERTLM_FLATC_EXECUTABLE}
+        # [LiteRTLM] The litert CMakeLists tries to build a HOST flatc in
+        # host_flatc_build/ when TFLITE_HOST_TOOLS_DIR is unset
+        # (CMAKE_CROSSCOMPILING); the fork stubs that sub-project to suppress
+        # external fetches, so 'flatc' target does not exist there and the
+        # build fails. The prebuilt host flatc already exists - pass its dir.
+        -DTFLITE_HOST_TOOLS_DIR=${LITERTLM_FLATBUFFERS_BIN_DIR}
         -Dflatbuffers_DIR=${LITERTLM_FLATBUFFERS_INSTALL_PREFIX}/lib/cmake/flatbuffers
         -DFETCHCONTENT_SOURCE_DIR_FLATBUFFERS=${LITERTLM_FLATBUFFERS_SRC_DIR}/flatbuffers_external
         -DFLATBUFFERS_INSTALL_PREFIX=${LITERTLM_FLATBUFFERS_INSTALL_PREFIX}
