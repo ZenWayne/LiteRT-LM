@@ -69,8 +69,11 @@ if(TRUE)
       # and ANDROID_NATIVE_API_LEVEL is set by neither the NDK toolchain nor
       # CMake's Android modules - it must be provided explicitly or cc-rs
       # fails with "failed to find tool /bin/aarch64-linux-android-clang".
+      # Derive the API level from ANDROID_PLATFORM (android-28 -> 28); do not
+      # use CMAKE_SYSTEM_VERSION here - it is not reliably 28 at this point.
+      string(REPLACE "android-" "" _litertlm_tokenizers_api "${ANDROID_PLATFORM}")
       "-DANDROID_TOOLCHAIN_ROOT=${ANDROID_TOOLCHAIN_ROOT}"
-      "-DANDROID_NATIVE_API_LEVEL=${CMAKE_SYSTEM_VERSION}"
+      "-DANDROID_NATIVE_API_LEVEL=${_litertlm_tokenizers_api}"
       # "-DCMAKE_PREFIX_PATH=${LITERTLM_ABSL_INSTALL_PREFIX};${LITERTLM_PROTOBUF_INSTALL_PREFIX};${LITERTLM_SENTENCEPIECE_INSTALL_PREFIX}"
   )
 
