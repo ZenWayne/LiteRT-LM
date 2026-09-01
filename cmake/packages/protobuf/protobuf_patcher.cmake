@@ -89,13 +89,3 @@ patch_file_content("${UTF8_RANGE_LIST}"
     FALSE
 )
 
-# [LiteRTLM] protobuf_BUILD_PROTOBUF_BINARIES=OFF (cross-built protoc can never
-# run on the host and nothing here consumes the upb generators) would also flip
-# protobuf_INSTALL OFF upstream (CMakeLists.txt "if (NOT protobuf_BUILD_PROTOBUF_BINARIES)
-# set(protobuf_INSTALL OFF)"), which kills the 'install' target the ExternalProject
-# install step needs. Neutralize it so the ON cache default stays in effect.
-patch_file_content("${ROOT_LIST}"
-    "set\(protobuf_INSTALL OFF\)"
-    "set(protobuf_INSTALL ON)  # [LiteRTLM] keep install ON while binaries off"
-    FALSE
-)
