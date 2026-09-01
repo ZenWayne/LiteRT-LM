@@ -22,7 +22,7 @@
       "description": "Cross-compiles LiteRT-LM for Android arm64. Auto-builds host tools first.",
       "inherits": "default",
       "environment": {
-        "ANDROID_NDK_ROOT": "$env{HOME}/android-ndk/android-ndk-r26d"
+        "ANDROID_NDK_ROOT": "$env{HOME}/android-ndk/android-ndk-r28b"
       },
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/litertlm_android.toolchain.cmake",
@@ -30,12 +30,12 @@
         "CMAKE_SYSTEM_NAME": "Android",
         "CMAKE_SYSTEM_VERSION": "28",
         "CMAKE_ANDROID_ARCH_ABI": "arm64-v8a",
-        "CMAKE_ANDROID_NDK": "$env{HOME}/android-ndk/android-ndk-r26d",
+        "CMAKE_ANDROID_NDK": "$env{HOME}/android-ndk/android-ndk-r28b",
         "CMAKE_ANDROID_STL_TYPE": "c++_shared",
         "ANDROID_ABI": "arm64-v8a",
         "ANDROID_PLATFORM": "android-28",
         "ANDROID_STL": "c++_shared",
-        "ANDROID_NDK_ROOT": "$env{HOME}/android-ndk/android-ndk-r26d"
+        "ANDROID_NDK_ROOT": "$env{HOME}/android-ndk/android-ndk-r28b"
       }
     }
   ]
