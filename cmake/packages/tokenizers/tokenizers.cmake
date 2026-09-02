@@ -33,6 +33,13 @@ set(LITERTLM_TOKENIZERS_INCLUDE_DIR
 set(LITERTLM_TOKENIZERS_LIB_CHECK "${LITERTLM_TOKENIZERS_BUILD_DIR}/libtokenizers_cpp.a")
 set(LITERTLM_TOKENIZERSS_CMAKE_PATH "${LITERTLM_CMAKE_PACKAGES_DIR}/tokenizers/tokenizers.cmake" CACHE PATH "")
 
+# [LiteRTLM] Android API level for the tokenizers-cpp Rust (cc-rs) toolchain
+# vars - derived from ANDROID_PLATFORM (android-28 -> 28). CMAKE_SYSTEM_VERSION
+# is not reliably 28 in this scope. Keep OUTSIDE of CMAKE_ARGS: a nested
+# string() command inside a list is parsed as a literal list item and would
+# leave the variable unset.
+string(REPLACE "android-" "" _litertlm_tokenizers_api "${ANDROID_PLATFORM}")
+
 if(TRUE)
   message(STATUS "tokenizers-cpp not found. Configuring external build...")
   ExternalProject_Add(
@@ -62,6 +69,15 @@ if(TRUE)
       "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS} -include cstdint"
       -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
       -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+      # [LiteRTLM] tokenizers-cpp builds its Rust `tokenizers` crate (onig_sys
+      # etc.) via cargo with cc-rs, whose per-target toolchain vars are
+      # ${ANDROID_TOOLCHAIN_ROOT}/bin/aarch64-linux-android${API}-clang. The
+      # API-less symlink does not exist in NDK r28b (only NN-suffixed clang),
+      # and ANDROID_NATIVE_API_LEVEL is set by neither the NDK toolchain nor
+      # CMake's Android modules - it must be provided explicitly or cc-rs
+      # fails with "failed to find tool /bin/aarch64-linux-android-clang".
+      "-DANDROID_TOOLCHAIN_ROOT=${ANDROID_TOOLCHAIN_ROOT}"
+      "-DANDROID_NATIVE_API_LEVEL=${_litertlm_tokenizers_api}"
       # "-DCMAKE_PREFIX_PATH=${LITERTLM_ABSL_INSTALL_PREFIX};${LITERTLM_PROTOBUF_INSTALL_PREFIX};${LITERTLM_SENTENCEPIECE_INSTALL_PREFIX}"
   )
 

@@ -55,6 +55,12 @@ if(NOT EXISTS "${LITERTLM_RE2_CONFIG_CMAKE_FILE}")
       "-DLITERTLM_ABSL_CONFIG_PATH=${LITERTLM_ABSL_CONFIG_PATH}"
       "-Dabsl_DIR=${LITERTLM_ABSL_INSTALL_PREFIX}/lib/cmake/absl"
       "-DCMAKE_INSTALL_PREFIX=${LITERTLM_RE2_INSTALL_PREFIX}"
+      # [LiteRTLM] REQUIRED for the Android JNI shared library link: re2.lib
+      # must be position-independent or lld rejects its vtables when the
+      # split archive is linked into libagentflow_jni.so
+      # (R_AARCH64_ADR_PREL_PG_HI21 ... cannot be used against symbol 'vtable
+      # for re2::...'; recompile with -fPIC). Every other EP sets this.
+      "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
   )
 else()
   message(STATUS "RE2 already installed at: ${LITERTLM_RE2_INSTALL_PREFIX}")

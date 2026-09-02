@@ -131,6 +131,17 @@ foreach(C_FILE ${ALL_CMAKELISTS})
         TRUE)
 endforeach()
 
+# [LiteRTLM] Samsung NPU dispatch opt-out.
+# Upstream litert/vendors/CMakeLists.txt FORCE-clobbers LITERT_ENABLE_SAMSUNG back
+# to ON whenever LITECORE_HEADERS_DIR is set -- and that dir is auto-populated by an
+# unconditional file(DOWNLOAD) a few lines above, so -DLITERT_ENABLE_SAMSUNG=OFF can
+# never take effect. Drop the FORCE line so the caller's choice is honoured.
+# (Motivation: GCC 16.1 ICEs compiling samsung/ai_litecore_manager.cc at -O3.)
+patch_file_content("${LITERTLM_LITERT_SRC_DIR}/vendors/CMakeLists.txt"
+    "set(LITERT_ENABLE_SAMSUNG ON CACHE BOOL \"\" FORCE)"
+    "# [LiteRTLM] Suppressed: honour explicit LITERT_ENABLE_SAMSUNG"
+    FALSE)
+
 patch_file_content("${LITERTLM_LITERT_SRC_DIR}/runtime/compiled_model.cc"
     " return litert_cpu_buffer_requirements"
     "return litert::Expected<const LiteRtTensorBufferRequirementsT*>(litert_cpu_buffer_requirements)"

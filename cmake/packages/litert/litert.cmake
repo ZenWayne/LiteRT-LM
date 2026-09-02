@@ -23,6 +23,12 @@ include("${LITERTLM_SENTENCEPIECE_CONFIG_PATH}")
 
 set(LITERTLM_LITERT_EXTERNAL_DONE ${LITERTLM_LITERT_STAMP_DIR}/litert_external-done CACHE INTERNAL "")
 
+# Samsung NPU dispatch is an Android/ARM vendor path that a CPU-only build never
+# loads, and GCC 16.1 ICEs compiling samsung/ai_litecore_manager.cc at -O3.
+# Default it off; litert_patcher.cmake removes upstream's FORCE clobber so this
+# value is actually honoured.
+option(LITERTLM_LITERT_ENABLE_SAMSUNG "Build the LiteRT Samsung NPU dispatch backend" OFF)
+
 include(ExternalProject)
 if(NOT EXISTS "${LITERTLM_LITERT_EXTERNAL_DONE}")
   if(TARGET fetch_content_complete)
@@ -153,6 +159,14 @@ if(NOT EXISTS "${LITERTLM_LITERT_EXTERNAL_DONE}")
         -DFLATC_PATHS=${LITERTLM_FLATBUFFERS_BIN_DIR}
         -DFLATBUFFERS_FLATC_EXECUTABLE=${LITERTLM_FLATC_EXECUTABLE}
         -DFLATC_EXECUTABLE=${LITERTLM_FLATC_EXECUTABLE}
+        # [LiteRTLM] The litert CMakeLists tries to build a HOST flatc in
+        # host_flatc_build/ when TFLITE_HOST_TOOLS_DIR is unset
+        # (CMAKE_CROSSCOMPILING); the fork stubs that sub-project to suppress
+        # external fetches, so 'flatc' target does not exist there and the
+        # build fails. The prebuilt host flatc already exists - use the host
+        # flatc dir (LITERTLM_FLATBUFFERS_BIN_DIR is the cross install prefix,
+        # which has no flatc).
+        -DTFLITE_HOST_TOOLS_DIR=${LITERTLM_HOST_FLATC_BIN_DIR}
         -Dflatbuffers_DIR=${LITERTLM_FLATBUFFERS_INSTALL_PREFIX}/lib/cmake/flatbuffers
         -DFETCHCONTENT_SOURCE_DIR_FLATBUFFERS=${LITERTLM_FLATBUFFERS_SRC_DIR}/flatbuffers_external
         -DFLATBUFFERS_INSTALL_PREFIX=${LITERTLM_FLATBUFFERS_INSTALL_PREFIX}
@@ -175,6 +189,7 @@ if(NOT EXISTS "${LITERTLM_LITERT_EXTERNAL_DONE}")
         -DLITERT_ENABLE_GPU=OFF
         -DLITERT_ENABLE_NPU=ON
         -DLITERT_ENABLE_QUALCOMM=ON
+        -DLITERT_ENABLE_SAMSUNG=${LITERTLM_LITERT_ENABLE_SAMSUNG}
         -DLITERT_DISABLE_KLEIDIAI=ON
         -DLITERT_BUILD_C_API=ON
         -DLITERT_BUILD_TOOLS=OFF
